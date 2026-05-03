@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WellGuard PRO X - v10.1 Full</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root { --lv-bg: #ced3d4; --lv-panel: #b4b9ba; --lv-border-light: #fdfdfd; --lv-border-dark: #7b7b7b; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", sans-serif; }
+        body { background: var(--lv-bg); padding: 5px; overflow-x: hidden; touch-action: manipulation; }
+        .lv-frame { border: 2px outset var(--lv-border-light); padding: 8px; background: var(--lv-panel); display: flex; flex-direction: column; gap: 8px; min-height: 98vh; }
+        
+        /* Header & Botões Superiores */
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--lv-border-dark); padding-bottom: 5px; }
+        .header h1 { font-size: 10px; font-weight: 900; }
+        .status-area { display: flex; gap: 5px; align-items: center; }
+        
+        .diag-box { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+        .led { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #444; background: #444; transition: 0.3s; }
+        #webLed.online { background: #0f0; box-shadow: 0 0 5px #0f0; }
+        #espLed.online { background: #00f; box-shadow: 0 0 5px #00f; }
+
+        /* Grid de Instrumentos */
+        .instrument-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .instrument { background: var(--lv-bg); border: 2px inset var(--lv-border-light); padding: 5px; display: flex; flex-direction: column; align-items: center; }
+        .label { font-size: 8px; font-weight: bold; background: #c0c0c0; width: 100%; text-align: center; border: 1px solid var(--lv-border-dark); margin-bottom: 4px; }
+        .display { background: #000; color: #3eff8b; width: 100%; text-align: right; padding: 4px; font-family: monospace; font-size: 20px; border: 2px inset #555; margin-bottom: 4px; font-weight: bold; min-height: 35px; width: 100%; }
+        
+        /* Barras Gráficas */
+        .bar-wrap { width: 100%; height: 8px; background: #333; border: 1px solid #000; overflow: hidden; margin-bottom: 4px; }
+        .bar-fill { height: 100%; width: 0%; background: linear-gradient(to right, #0f0, #ff0, #f00); transition: 0.3s; }
+        
+        /* Alarmes */
+        .alarm { width: 14px; height: 14px; background: #300; border: 1px solid #000; }
+        .alarm-on { background: #f00; box-shadow: 0 0 8px #f00; animation: blink 0.5s infinite; }
+        @keyframes blink { 50% { opacity: 0.2; } }
+
+        /* Botões */
+        .footer-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: auto; }
+        button { background: #eee; border: 2px outset #fff; padding: 8px 4px; font-size: 9px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+        button:active { border-style: inset; }
+        
+        #muteBtn.active { background: #f00; color: white; }
+        #presOnBtn { background: #3a506b; color: white; min-width: 75px; }
+        #presOnBtn.off { background: #555; color: #aaa; }
+        .btn-full { background: #444; color: white; font-size: 8px; }
+        .btn-pdf { background: #5d5d5d; color: white; }
+        .btn-params { background: #3a506b; color: white; }
+
+        /* Modal */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; }
+        .modal-content { background: var(--lv-panel); padding: 15px; border: 3px outset #fff; width: 85%; display: flex; flex-direction: column; gap: 5px; }
+        input { padding: 8px; font-size: 16px; text-align: center; }
+    </style>
+</head>
+<body onclick="initAudio()">
+
+<div class="lv-frame" id="mainFrame">
+    <div class="header">
+        <h1>WELLGUARD PRO X</h1>
+        <div class="status-area">
+            <button class="btn-full" onclick="toggleFullScreen()">[ ]</button>
+            <button id="presOnBtn" onclick="togglePresenca()">PRES: ON</button>
+            <div class="diag-box"><div id="webLed" class="led"></div><span style="font-size:6px">WEB</span></div>
+            <div class="diag-box"><div id="espLed" class="led"></div><span style="font-size:6px">ESP</span></div>
+            <button id="muteBtn" onclick="toggleMute()">MUTE</button>
+        </div>
+    </div>
+
+    <div class="instrument-grid">
+        <div class="instrument"><div class="label">GÁS (PPM)</div><div class="display" id="gasV">0000</div><div class="bar-wrap"><div id="gasB" class="bar-fill"></div></div><div id="gasA" class="alarm"></div></div>
+        <div class="instrument"><div class="label">TEMP (°C)</div><div class="display" id="tempV">0.0</div><div class="bar-wrap"><div id="tempB" class="bar-fill"></div></div><div id="tempA" class="alarm"></div></div>
+        <div class="instrument"><div class="label">VAZÃO (L/M)</div><div class="display" id="flowV">0.0</div><div class="bar-wrap"><div id="flowB" class="bar-fill"></div></div><div id="flowA" class="alarm"></div></div>
+        <div class="instrument"><div class="label">PRESS (BAR)</div><div class="display" id="pressV">0.00</div><div class="bar-wrap"><div id="pressB" class="bar-fill"></div></div><div id="pressA" class="alarm"></div></div>
+        <div class="instrument"><div class="label">NÍVEL (%)</div><div class="display" id="nivelV">0.0</div><div class="bar-wrap"><div id="nivelB" class="bar-fill"></div></div><div id="nivelA" class="alarm"></div></div>
+        <div class="instrument"><div class="label">PRESENÇA</div><div class="display" id="presV" style="font-size:16px; text-align:center;">OK</div><div style="height:8px; margin-bottom:4px"></div><div id="presA" class="alarm"></div></div>
+    </div>
+
+    <div class="footer-btns">
+        <button class="btn-pdf" onclick="generatePDF()">GERAR PDF</button>
+        <button class="btn-params" onclick="document.getElementById('modal').style.display='flex'">PARÂMETROS</button>
+    </div>
+</div>
+
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <h3>AJUSTES</h3>
+        <label>SP GÁS</label><input type="number" id="s1">
+        <label>SP TEMP</label><input type="number" id="s2">
+        <label>SP VAZÃO</label><input type="number" id="s3">
+        <label>SP PRESS</label><input type="number" id="s4" step="0.1">
+        <label>SP NÍVEL</label><input type="number" id="s5">
+        <label>ZERO GÁS</label><input type="number" id="s6">
+        <button onclick="save()" style="background:#28a745; color:white; padding:10px;">SALVAR NO ESP32</button>
+        <button onclick="document.getElementById('modal').style.display='none'">VOLTAR</button>
+    </div>
+</div>
+
+<script>
+    const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
+    let alarmsLog = JSON.parse(localStorage.getItem('dailyLog') || "[]");
+    let espTimeout = null, audioCtx = null, sirenInterval = null, isMuted = false, presencaLigada = true;
+
+    function initAudio() { if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+    function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                alert(`Erro ao ativar tela cheia: ${err.message}`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    }
+
+    function toggleMute() {
+        isMuted = !isMuted;
+        document.getElementById('muteBtn').classList.toggle('active', isMuted);
+        client.publish('casa/set/mute', isMuted ? "1" : "0");
+        if (isMuted && sirenInterval) { clearInterval(sirenInterval); sirenInterval = null; }
+    }
+
+    function togglePresenca() {
+        presencaLigada = !presencaLigada;
+        const btn = document.getElementById('presOnBtn');
+        btn.innerText = presencaLigada ? "PRES: ON" : "PRES: OFF";
+        btn.classList.toggle('off', !presencaLigada);
+        client.publish('casa/set/presenca_on', presencaLigada ? "1" : "0");
+    }
+
+    function playSiren(on) {
+        if (!on || isMuted || !audioCtx) {
+            if(sirenInterval) { clearInterval(sirenInterval); sirenInterval = null; }
+            return;
+        }
+        if (!sirenInterval) {
+            sirenInterval = setInterval(() => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.value = (Math.floor(Date.now()/400)%2==0) ? 950 : 650;
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+            }, 400);
+        }
+    }
+
+    function logEvent(sensor, valor, status) {
+        const agora = new Date();
+        alarmsLog.push({ data: agora.toLocaleDateString('pt-BR'), hora: agora.toLocaleTimeString('pt-BR'), sensor, valor, status });
+        if(alarmsLog.length > 100) alarmsLog.shift();
+        localStorage.setItem('dailyLog', JSON.stringify(alarmsLog));
+    }
+
+    function generatePDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.text("RELATORIO WELLGUARD PRO X", 10, 15);
+        let y = 30;
+        alarmsLog.slice(-40).forEach(l => {
+            doc.text(`${l.hora} | ${l.sensor} | Val: ${l.valor} | ${l.status}`, 10, y);
+            y += 8; if(y > 280) { doc.addPage(); y = 20; }
+        });
+        doc.save(`Relatorio_WellGuard.pdf`);
+    }
+
+    client.on("connect", () => {
+        document.getElementById('webLed').classList.add('online');
+        client.subscribe(["casa/gas/vazamento", "casa/temp/ambiente", "casa/fluxo/agua", "casa/pressao/agua", "casa/nivel/caixa", "casa/presenca/status"]);
+    });
+
+    client.on("message", (t, m) => {
+        document.getElementById('espLed').classList.add('online');
+        clearTimeout(espTimeout);
+        espTimeout = setTimeout(() => document.getElementById('espLed').classList.remove('online'), 2000);
+
+        const valStr = m.toString();
+        const num = parseFloat(valStr);
+
+        if(t.includes("gas")) {
+            const sp = parseInt(document.getElementById('s1').value);
+            const realGas = Math.max(0, num - (parseInt(document.getElementById('s6').value)||0));
+            document.getElementById('gasV').innerText = realGas;
+            document.getElementById('gasB').style.width = Math.min((realGas/sp)*100, 100) + "%";
+            const alm = realGas >= sp;
+            if(alm && !document.getElementById('gasA').classList.contains('alarm-on')) logEvent("GAS", realGas, "ALERTA");
+            document.getElementById('gasA').classList.toggle('alarm-on', alm);
+        } 
+        else if(t.includes("temp")) {
+            const sp = parseFloat(document.getElementById('s2').value);
+            document.getElementById('tempV').innerText = num.toFixed(1);
+            document.getElementById('tempB').style.width = Math.min((num/sp)*100, 100) + "%";
+            const alm = num >= sp;
+            if(alm && !document.getElementById('tempA').classList.contains('alarm-on')) logEvent("TEMP", num, "ALTA");
+            document.getElementById('tempA').classList.toggle('alarm-on', alm);
+        }
+        else if(t.includes("fluxo")) {
+            const sp = parseFloat(document.getElementById('s3').value);
+            document.getElementById('flowV').innerText = num.toFixed(1);
+            document.getElementById('flowB').style.width = Math.min((num/sp)*100, 100) + "%";
+            document.getElementById('flowA').classList.toggle('alarm-on', num >= sp);
+        }
+        else if(t.includes("pressao")) {
+            const sp = parseFloat(document.getElementById('s4').value);
+            document.getElementById('pressV').innerText = num.toFixed(2);
+            document.getElementById('pressB').style.width = Math.min((num/sp)*100, 100) + "%";
+            document.getElementById('pressA').classList.toggle('alarm-on', num >= sp);
+        }
+        else if(t.includes("nivel")) {
+            const sp = parseFloat(document.getElementById('s5').value);
+            document.getElementById('nivelV').innerText = num.toFixed(1);
+            document.getElementById('nivelB').style.width = Math.min(num, 100) + "%";
+            document.getElementById('nivelA').classList.toggle('alarm-on', num >= sp);
+        }
+        else if(t.includes("presenca")) {
+            const det = (valStr === "DETECTADO");
+            document.getElementById('presV').innerText = det ? "ALERT" : "OK";
+            document.getElementById('presV').style.color = det ? "#f00" : "#3eff8b";
+            const alm = (det && presencaLigada);
+            if(alm && !document.getElementById('presA').classList.contains('alarm-on')) logEvent("PRESENCA", "MOV", "INVASAO");
+            document.getElementById('presA').classList.toggle('alarm-on', alm);
+        }
+        playSiren(document.querySelectorAll('.alarm-on').length > 0);
+    });
+
+    function save() {
+        const config = {s1:'gas', s2:'temp', s3:'fluxo', s4:'pressao', s5:'nivel', s6:'base'};
+        for(let id in config) {
+            const val = document.getElementById(id).value;
+            localStorage.setItem('wellguard_v10_'+id, val);
+            client.publish('casa/set/' + config[id], val);
+        }
+        document.getElementById('modal').style.display = 'none';
+        initAudio();
+    }
+
+    window.onload = () => {
+        const keys = ['s1','s2','s3','s4','s5','s6'];
+        const defaults = [2000, 50, 10, 4, 80, 0];
+        keys.forEach((k, i) => document.getElementById(k).value = localStorage.getItem('wellguard_v10_'+k) || defaults[i]);
+    };
+</script>
+</body>
+</html>
