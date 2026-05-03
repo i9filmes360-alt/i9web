@@ -3,244 +3,247 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - v10.1 Full</title>
+    <title>WellGuard PRO X - v11.1</title>
+    
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
     <style>
-        :root { --lv-bg: #ced3d4; --lv-panel: #b4b9ba; --lv-border-light: #fdfdfd; --lv-border-dark: #7b7b7b; }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", sans-serif; }
-        body { background: var(--lv-bg); padding: 5px; overflow-x: hidden; touch-action: manipulation; }
-        .lv-frame { border: 2px outset var(--lv-border-light); padding: 8px; background: var(--lv-panel); display: flex; flex-direction: column; gap: 8px; min-height: 98vh; }
-        
-        /* Header & Botões Superiores */
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--lv-border-dark); padding-bottom: 5px; }
-        .header h1 { font-size: 10px; font-weight: 900; }
-        .status-area { display: flex; gap: 5px; align-items: center; }
-        
-        .diag-box { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-        .led { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #444; background: #444; transition: 0.3s; }
-        #webLed.online { background: #0f0; box-shadow: 0 0 5px #0f0; }
-        #espLed.online { background: #00f; box-shadow: 0 0 5px #00f; }
+        :root {
+            --bg: #0a0a0b;
+            --card: #141416;
+            --vis-bg: #050505;
+            --cyan: #00f5ff; /* Cor dos Dígitos */
+            --purple: #8b00ff;
+            --red: #ff2d55;  /* Cor dos Botões ON */
+            --green: #00ff9d;
+            --btn-gray: #1f1f22;
+        }
 
-        /* Grid de Instrumentos */
-        .instrument-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-        .instrument { background: var(--lv-bg); border: 2px inset var(--lv-border-light); padding: 5px; display: flex; flex-direction: column; align-items: center; }
-        .label { font-size: 8px; font-weight: bold; background: #c0c0c0; width: 100%; text-align: center; border: 1px solid var(--lv-border-dark); margin-bottom: 4px; }
-        .display { background: #000; color: #3eff8b; width: 100%; text-align: right; padding: 4px; font-family: monospace; font-size: 20px; border: 2px inset #555; margin-bottom: 4px; font-weight: bold; min-height: 35px; width: 100%; }
-        
-        /* Barras Gráficas */
-        .bar-wrap { width: 100%; height: 8px; background: #333; border: 1px solid #000; overflow: hidden; margin-bottom: 4px; }
-        .bar-fill { height: 100%; width: 0%; background: linear-gradient(to right, #0f0, #ff0, #f00); transition: 0.3s; }
-        
-        /* Alarmes */
-        .alarm { width: 14px; height: 14px; background: #300; border: 1px solid #000; }
-        .alarm-on { background: #f00; box-shadow: 0 0 8px #f00; animation: blink 0.5s infinite; }
-        @keyframes blink { 50% { opacity: 0.2; } }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: #ddd; padding: 5px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 1000px; background: var(--card); border-radius: 15px; overflow: hidden; border: 1px solid #222; display: flex; flex-direction: column; }
 
-        /* Botões */
-        .footer-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: auto; }
-        button { background: #eee; border: 2px outset #fff; padding: 8px 4px; font-size: 9px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
-        button:active { border-style: inset; }
-        
-        #muteBtn.active { background: #f00; color: white; }
-        #presOnBtn { background: #3a506b; color: white; min-width: 75px; }
-        #presOnBtn.off { background: #555; color: #aaa; }
-        .btn-full { background: #444; color: white; font-size: 8px; }
-        .btn-pdf { background: #5d5d5d; color: white; }
-        .btn-params { background: #3a506b; color: white; }
+        /* CABEÇALHO */
+        .header { background: #0d0d0f; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; }
+        .header h1 { font-size: 0.85rem; font-weight: 900; color: var(--cyan); letter-spacing: 1px; }
+        .status-area { display: flex; align-items: center; gap: 10px; }
+        .led-group { display: flex; gap: 8px; align-items: center; }
+        .led-item { font-size: 0.5rem; color: #666; text-align: center; }
+        .led { width: 10px; height: 10px; border-radius: 50%; background: #222; margin: 0 auto 2px; border: 1px solid #000; }
+        #webLed.online { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+        #espLed.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
 
-        /* Modal */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; }
-        .modal-content { background: var(--lv-panel); padding: 15px; border: 3px outset #fff; width: 85%; display: flex; flex-direction: column; gap: 5px; }
-        input { padding: 8px; font-size: 16px; text-align: center; }
+        /* GRID */
+        .instrument-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; }
+        .instrument { background: #18181a; border-radius: 12px; padding: 10px; border: 1px solid #252525; display: flex; flex-direction: column; }
+        .label { font-size: 0.6rem; color: #888; margin-bottom: 5px; text-transform: uppercase; font-weight: 600; }
+        .visor-interno { background: var(--vis-bg); border-radius: 8px; padding: 5px 10px; margin-bottom: 5px; border-top: 1px solid #000; box-shadow: inset 2px 2px 5px rgba(0,0,0,0.5); }
+        
+        /* DÍGITOS AGORA EM CIANO */
+        .display { font-size: 1.6rem; font-weight: 700; font-family: 'Courier New', monospace; color: var(--cyan); text-align: right; text-shadow: 0 0 10px rgba(0, 245, 255, 0.3); }
+
+        /* BARRAS */
+        .bar-wrap { height: 5px; background: #000; border-radius: 5px; overflow: hidden; margin-top: 3px; }
+        .bar-fill { height: 100%; background: linear-gradient(90deg, var(--green) 0%, #ffcc00 50%, var(--red) 100%); width: 0%; transition: 0.4s ease-in-out; }
+
+        /* BOTÕES AGORA EM VERMELHO QUANDO ATIVOS */
+        .card-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; }
+        .btn-toggle { padding: 4px 8px; font-size: 0.55rem; background: #1f1f22; color: #777; border: 1px solid #333; min-width: 40px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-active { background: var(--red); color: #fff; border-color: var(--red); box-shadow: 0 0 8px rgba(255, 45, 85, 0.4); }
+
+        .alarm { width: 14px; height: 14px; border-radius: 50%; background: #111; border: 1px solid #000; }
+        .alarm-on { background: var(--red); box-shadow: 0 0 10px var(--red); animation: pulse 0.5s infinite; }
+
+        @keyframes pulse { 50% { opacity: 0.3; } }
+        .footer-btns { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        button.btn-sec { padding: 10px; background: var(--btn-gray); color: #bbb; border: 1px solid #2a2a2a; border-radius: 8px; font-weight: 700; font-size: 0.65rem; cursor: pointer; }
+
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-content { background: #141416; padding: 20px; border-radius: 15px; width: 85%; max-width: 320px; border: 1px solid #333; }
+        input { width: 100%; padding: 8px; background: #080808; border: 1px solid #2a2a2a; color: var(--cyan); margin-bottom: 8px; border-radius: 5px; outline: none; }
+        label { font-size: 10px; color: #666; text-transform: uppercase; }
     </style>
 </head>
 <body onclick="initAudio()">
 
-<div class="lv-frame" id="mainFrame">
+<div class="container">
     <div class="header">
-        <h1>WELLGUARD PRO X</h1>
+        <h1>WELLGUARD PRO X v11.1</h1>
         <div class="status-area">
-            <button class="btn-full" onclick="toggleFullScreen()">[ ]</button>
-            <button id="presOnBtn" onclick="togglePresenca()">PRES: ON</button>
-            <div class="diag-box"><div id="webLed" class="led"></div><span style="font-size:6px">WEB</span></div>
-            <div class="diag-box"><div id="espLed" class="led"></div><span style="font-size:6px">ESP</span></div>
-            <button id="muteBtn" onclick="toggleMute()">MUTE</button>
+            <button onclick="toggleFullScreen()" style="background:var(--btn-gray); color:white; border:1px solid #333; padding: 5px 10px; border-radius:4px;">⛶</button>
+            <div class="led-group">
+                <div class="led-item"><div id="webLed" class="led"></div>WEB</div>
+                <div class="led-item"><div id="espLed" class="led"></div>ESP</div>
+            </div>
+            <button id="muteBtn" onclick="toggleMute()" style="background:var(--btn-gray); color:#eee; border:1px solid #333; padding:5px 8px; border-radius:4px;">MUTE</button>
         </div>
     </div>
 
     <div class="instrument-grid">
-        <div class="instrument"><div class="label">GÁS (PPM)</div><div class="display" id="gasV">0000</div><div class="bar-wrap"><div id="gasB" class="bar-fill"></div></div><div id="gasA" class="alarm"></div></div>
-        <div class="instrument"><div class="label">TEMP (°C)</div><div class="display" id="tempV">0.0</div><div class="bar-wrap"><div id="tempB" class="bar-fill"></div></div><div id="tempA" class="alarm"></div></div>
-        <div class="instrument"><div class="label">VAZÃO (L/M)</div><div class="display" id="flowV">0.0</div><div class="bar-wrap"><div id="flowB" class="bar-fill"></div></div><div id="flowA" class="alarm"></div></div>
-        <div class="instrument"><div class="label">PRESS (BAR)</div><div class="display" id="pressV">0.00</div><div class="bar-wrap"><div id="pressB" class="bar-fill"></div></div><div id="pressA" class="alarm"></div></div>
-        <div class="instrument"><div class="label">NÍVEL (%)</div><div class="display" id="nivelV">0.0</div><div class="bar-wrap"><div id="nivelB" class="bar-fill"></div></div><div id="nivelA" class="alarm"></div></div>
-        <div class="instrument"><div class="label">PRESENÇA</div><div class="display" id="presV" style="font-size:16px; text-align:center;">OK</div><div style="height:8px; margin-bottom:4px"></div><div id="presA" class="alarm"></div></div>
+        <div class="instrument">
+            <div class="label">GÁS (PPM)</div>
+            <div class="visor-interno"><div class="display" id="gasV">0000</div><div class="bar-wrap"><div id="gasB" class="bar-fill"></div></div></div>
+            <div class="card-controls"><button id="gasTgl" onclick="toggleSensor('gas')" class="btn-toggle btn-active">ON</button><div id="gasA" class="alarm"></div></div>
+        </div>
+        <div class="instrument">
+            <div class="label">TEMP (°C)</div>
+            <div class="visor-interno"><div class="display" id="tempV">0.0</div><div class="bar-wrap"><div id="tempB" class="bar-fill"></div></div></div>
+            <div class="card-controls"><button id="tempTgl" onclick="toggleSensor('temp')" class="btn-toggle btn-active">ON</button><div id="tempA" class="alarm"></div></div>
+        </div>
+        <div class="instrument">
+            <div class="label">VAZÃO (L/M)</div>
+            <div class="visor-interno"><div class="display" id="flowV">0.0</div><div class="bar-wrap"><div id="flowB" class="bar-fill"></div></div></div>
+            <div class="card-controls"><button id="flowTgl" onclick="toggleSensor('flow')" class="btn-toggle btn-active">ON</button><div id="flowA" class="alarm"></div></div>
+        </div>
+        <div class="instrument">
+            <div class="label">PRESS (BAR)</div>
+            <div class="visor-interno"><div class="display" id="pressV">0.00</div><div class="bar-wrap"><div id="pressB" class="bar-fill"></div></div></div>
+            <div class="card-controls"><button id="pressTgl" onclick="toggleSensor('press')" class="btn-toggle btn-active">ON</button><div id="pressA" class="alarm"></div></div>
+        </div>
+        <div class="instrument">
+            <div class="label">NÍVEL (%)</div>
+            <div class="visor-interno"><div class="display" id="nivelV">0.0</div><div class="bar-wrap"><div id="nivelB" class="bar-fill"></div></div></div>
+            <div class="card-controls"><button id="nivelTgl" onclick="toggleSensor('nivel')" class="btn-toggle btn-active">ON</button><div id="nivelA" class="alarm"></div></div>
+        </div>
+        <div class="instrument">
+            <div class="label">PRESENÇA</div>
+            <div class="visor-interno"><div class="display" id="presV" style="text-align:center; font-size:1.1rem;">OK</div><div class="bar-wrap"><div id="presB" class="bar-fill"></div></div></div>
+            <div class="card-controls"><button id="presTgl" onclick="toggleSensor('pres')" class="btn-toggle btn-active">ON</button><div id="presA" class="alarm"></div></div>
+        </div>
     </div>
 
     <div class="footer-btns">
-        <button class="btn-pdf" onclick="generatePDF()">GERAR PDF</button>
-        <button class="btn-params" onclick="document.getElementById('modal').style.display='flex'">PARÂMETROS</button>
+        <button class="btn-sec" onclick="window.print()">📄 RELATÓRIO</button>
+        <button class="btn-sec" onclick="document.getElementById('modal').style.display='flex'">⚙️ CONFIG</button>
     </div>
 </div>
 
 <div id="modal" class="modal">
     <div class="modal-content">
-        <h3>AJUSTES</h3>
-        <label>SP GÁS</label><input type="number" id="s1">
-        <label>SP TEMP</label><input type="number" id="s2">
-        <label>SP VAZÃO</label><input type="number" id="s3">
-        <label>SP PRESS</label><input type="number" id="s4" step="0.1">
-        <label>SP NÍVEL</label><input type="number" id="s5">
-        <label>ZERO GÁS</label><input type="number" id="s6">
-        <button onclick="save()" style="background:#28a745; color:white; padding:10px;">SALVAR NO ESP32</button>
-        <button onclick="document.getElementById('modal').style.display='none'">VOLTAR</button>
+        <h4>PARÂMETROS</h4>
+        <label>SP GÁS</label><input type="number" id="s1" value="2000">
+        <label>SP TEMP</label><input type="number" id="s2" value="50">
+        <label>SP VAZÃO</label><input type="number" id="s3" value="10">
+        <label>SP PRESS</label><input type="number" id="s4" value="4">
+        <label>SP NÍVEL</label><input type="number" id="s5" value="80">
+        <label>ZERO GÁS</label><input type="number" id="s6" value="0">
+        <button onclick="save()" style="background:var(--purple); color:white; width:100%; padding:10px; border:none; border-radius:5px; margin-top:10px; font-weight:bold;">SALVAR</button>
+        <button onclick="document.getElementById('modal').style.display='none'" style="background:none; color:#888; width:100%; margin-top:10px; border:none;">FECHAR</button>
     </div>
 </div>
 
 <script>
     const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
-    let alarmsLog = JSON.parse(localStorage.getItem('dailyLog') || "[]");
-    let espTimeout = null, audioCtx = null, sirenInterval = null, isMuted = false, presencaLigada = true;
+    let espTimeout = null, audioCtx = null, sirenInterval = null, isMuted = false;
+    let activeAlarms = new Set();
+    const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
 
+    // --- SIRENE FRANCESA TURBO (Hi-Lo Rápido) ---
     function initAudio() { if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 
+    function startSiren() {
+        if (sirenInterval || isMuted) return;
+        initAudio();
+        let step = 0;
+        const freqs = [440, 587]; 
+        sirenInterval = setInterval(() => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(freqs[step], audioCtx.currentTime);
+            gain.gain.setValueAtTime(0, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.4);
+            step = (step + 1) % 2;
+        }, 400); 
+    }
+
+    function stopSiren() { clearInterval(sirenInterval); sirenInterval = null; }
+
+    function updateAlarm(id, isActive) {
+        if (isActive) activeAlarms.add(id); else activeAlarms.delete(id);
+        document.getElementById(id + 'A').classList.toggle('alarm-on', isActive);
+        if (activeAlarms.size > 0 && !isMuted) startSiren(); else stopSiren();
+    }
+
     function toggleFullScreen() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                alert(`Erro ao ativar tela cheia: ${err.message}`);
-            });
-        } else {
-            document.exitFullscreen();
-        }
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
     }
 
     function toggleMute() {
         isMuted = !isMuted;
-        document.getElementById('muteBtn').classList.toggle('active', isMuted);
-        client.publish('casa/set/mute', isMuted ? "1" : "0");
-        if (isMuted && sirenInterval) { clearInterval(sirenInterval); sirenInterval = null; }
+        document.getElementById('muteBtn').style.background = isMuted ? '#ff2d55' : '#1f1f22';
+        if (isMuted) stopSiren(); else if (activeAlarms.size > 0) startSiren();
     }
 
-    function togglePresenca() {
-        presencaLigada = !presencaLigada;
-        const btn = document.getElementById('presOnBtn');
-        btn.innerText = presencaLigada ? "PRES: ON" : "PRES: OFF";
-        btn.classList.toggle('off', !presencaLigada);
-        client.publish('casa/set/presenca_on', presencaLigada ? "1" : "0");
+    function toggleSensor(type) {
+        sensorStatus[type] = !sensorStatus[type];
+        const btn = document.getElementById(type + 'Tgl');
+        btn.innerText = sensorStatus[type] ? "ON" : "OFF";
+        btn.classList.toggle('btn-active');
+        if(!sensorStatus[type]) updateAlarm(type, false);
     }
 
-    function playSiren(on) {
-        if (!on || isMuted || !audioCtx) {
-            if(sirenInterval) { clearInterval(sirenInterval); sirenInterval = null; }
-            return;
-        }
-        if (!sirenInterval) {
-            sirenInterval = setInterval(() => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'triangle';
-                osc.frequency.value = (Math.floor(Date.now()/400)%2==0) ? 950 : 650;
-                osc.connect(gain); gain.connect(audioCtx.destination);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.4);
-            }, 400);
-        }
-    }
-
-    function logEvent(sensor, valor, status) {
-        const agora = new Date();
-        alarmsLog.push({ data: agora.toLocaleDateString('pt-BR'), hora: agora.toLocaleTimeString('pt-BR'), sensor, valor, status });
-        if(alarmsLog.length > 100) alarmsLog.shift();
-        localStorage.setItem('dailyLog', JSON.stringify(alarmsLog));
-    }
-
-    function generatePDF() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        doc.text("RELATORIO WELLGUARD PRO X", 10, 15);
-        let y = 30;
-        alarmsLog.slice(-40).forEach(l => {
-            doc.text(`${l.hora} | ${l.sensor} | Val: ${l.valor} | ${l.status}`, 10, y);
-            y += 8; if(y > 280) { doc.addPage(); y = 20; }
-        });
-        doc.save(`Relatorio_WellGuard.pdf`);
-    }
-
-    client.on("connect", () => {
-        document.getElementById('webLed').classList.add('online');
-        client.subscribe(["casa/gas/vazamento", "casa/temp/ambiente", "casa/fluxo/agua", "casa/pressao/agua", "casa/nivel/caixa", "casa/presenca/status"]);
-    });
-
+    client.on("connect", () => document.getElementById('webLed').classList.add('online'));
     client.on("message", (t, m) => {
         document.getElementById('espLed').classList.add('online');
         clearTimeout(espTimeout);
         espTimeout = setTimeout(() => document.getElementById('espLed').classList.remove('online'), 2000);
-
-        const valStr = m.toString();
-        const num = parseFloat(valStr);
+        const val = m.toString();
+        const num = parseFloat(val);
 
         if(t.includes("gas")) {
             const sp = parseInt(document.getElementById('s1').value);
-            const realGas = Math.max(0, num - (parseInt(document.getElementById('s6').value)||0));
-            document.getElementById('gasV').innerText = realGas;
-            document.getElementById('gasB').style.width = Math.min((realGas/sp)*100, 100) + "%";
-            const alm = realGas >= sp;
-            if(alm && !document.getElementById('gasA').classList.contains('alarm-on')) logEvent("GAS", realGas, "ALERTA");
-            document.getElementById('gasA').classList.toggle('alarm-on', alm);
-        } 
-        else if(t.includes("temp")) {
+            const r = Math.max(0, num - parseInt(document.getElementById('s6').value));
+            document.getElementById('gasV').innerText = r;
+            document.getElementById('gasB').style.width = Math.min((r/sp)*100, 100) + "%";
+            updateAlarm('gas', r >= sp && sensorStatus.gas);
+        } else if(t.includes("temp")) {
             const sp = parseFloat(document.getElementById('s2').value);
             document.getElementById('tempV').innerText = num.toFixed(1);
             document.getElementById('tempB').style.width = Math.min((num/sp)*100, 100) + "%";
-            const alm = num >= sp;
-            if(alm && !document.getElementById('tempA').classList.contains('alarm-on')) logEvent("TEMP", num, "ALTA");
-            document.getElementById('tempA').classList.toggle('alarm-on', alm);
-        }
-        else if(t.includes("fluxo")) {
+            updateAlarm('temp', num >= sp && sensorStatus.temp);
+        } else if(t.includes("fluxo")) {
             const sp = parseFloat(document.getElementById('s3').value);
             document.getElementById('flowV').innerText = num.toFixed(1);
             document.getElementById('flowB').style.width = Math.min((num/sp)*100, 100) + "%";
-            document.getElementById('flowA').classList.toggle('alarm-on', num >= sp);
-        }
-        else if(t.includes("pressao")) {
+            updateAlarm('flow', num >= sp && sensorStatus.flow);
+        } else if(t.includes("pressao")) {
             const sp = parseFloat(document.getElementById('s4').value);
             document.getElementById('pressV').innerText = num.toFixed(2);
             document.getElementById('pressB').style.width = Math.min((num/sp)*100, 100) + "%";
-            document.getElementById('pressA').classList.toggle('alarm-on', num >= sp);
-        }
-        else if(t.includes("nivel")) {
+            updateAlarm('press', num >= sp && sensorStatus.press);
+        } else if(t.includes("nivel")) {
             const sp = parseFloat(document.getElementById('s5').value);
             document.getElementById('nivelV').innerText = num.toFixed(1);
             document.getElementById('nivelB').style.width = Math.min(num, 100) + "%";
-            document.getElementById('nivelA').classList.toggle('alarm-on', num >= sp);
+            updateAlarm('nivel', num >= sp && sensorStatus.nivel);
+        } else if(t.includes("presenca")) {
+            const d = (val === "DETECTADO");
+            document.getElementById('presV').innerText = d ? "ALERT" : "OK";
+            document.getElementById('presV').style.color = d ? "var(--red)" : "var(--cyan)";
+            document.getElementById('presB').style.width = d ? "100%" : "0%";
+            updateAlarm('pres', d && sensorStatus.pres);
         }
-        else if(t.includes("presenca")) {
-            const det = (valStr === "DETECTADO");
-            document.getElementById('presV').innerText = det ? "ALERT" : "OK";
-            document.getElementById('presV').style.color = det ? "#f00" : "#3eff8b";
-            const alm = (det && presencaLigada);
-            if(alm && !document.getElementById('presA').classList.contains('alarm-on')) logEvent("PRESENCA", "MOV", "INVASAO");
-            document.getElementById('presA').classList.toggle('alarm-on', alm);
-        }
-        playSiren(document.querySelectorAll('.alarm-on').length > 0);
     });
 
+    client.subscribe(["casa/gas/vazamento", "casa/temp/ambiente", "casa/fluxo/agua", "casa/pressao/agua", "casa/nivel/caixa", "casa/presenca/status"]);
+
     function save() {
-        const config = {s1:'gas', s2:'temp', s3:'fluxo', s4:'pressao', s5:'nivel', s6:'base'};
-        for(let id in config) {
-            const val = document.getElementById(id).value;
-            localStorage.setItem('wellguard_v10_'+id, val);
-            client.publish('casa/set/' + config[id], val);
-        }
-        document.getElementById('modal').style.display = 'none';
-        initAudio();
+        ['s1','s2','s3','s4','s5','s6'].forEach(id => localStorage.setItem('wg_'+id, document.getElementById(id).value));
+        document.getElementById('modal').style.display='none';
     }
 
     window.onload = () => {
-        const keys = ['s1','s2','s3','s4','s5','s6'];
-        const defaults = [2000, 50, 10, 4, 80, 0];
-        keys.forEach((k, i) => document.getElementById(k).value = localStorage.getItem('wellguard_v10_'+k) || defaults[i]);
+        ['s1','s2','s3','s4','s5','s6'].forEach(id => {
+            const v = localStorage.getItem('wg_'+id);
+            if(v) document.getElementById(id).value = v;
+        });
     };
 </script>
 </body>
