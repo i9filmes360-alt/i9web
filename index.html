@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - v10.8.4</title>
+    <title>WellGuard PRO X - v10.8.5</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js">
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
@@ -81,6 +81,10 @@
         .status-bar .status-dot.error {
             background: var(--red);
             box-shadow: 0 0 10px rgba(255, 45, 85, 0.3);
+        }
+        .status-bar .status-dot.loading {
+            background: var(--yellow);
+            animation: blinkText 0.5s infinite;
         }
 
         .lockdown-overlay {
@@ -618,6 +622,9 @@
             <div class="status-item">
                 <span id="msgCount">📨 0 msgs</span>
             </div>
+            <div class="status-item">
+                <span id="syncStatus" style="color:var(--yellow);">🔄 Carregando...</span>
+            </div>
         </div>
 
         <div class="lockdown-overlay" id="lockdownOverlay"></div>
@@ -776,6 +783,7 @@
         let isMuted = false;
         let sirenInterval = null;
         let audioCtx = null;
+        let configLoaded = false;
         const ESP_TIMEOUT = 5000;
 
         const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
@@ -795,6 +803,12 @@
 
             client.publish('casa/set/sms_url', API_CONFIG.url);
             client.publish('casa/set/sms_token', API_CONFIG.token);
+            
+            // SOLICITA CONFIGURAÇÕES DO ESP
+            document.getElementById('syncStatus').textContent = '🔄 Buscando configurações...';
+            document.getElementById('syncStatus').style.color = 'var(--yellow)';
+            client.publish("casa/get/config", "1");
+            client.publish("casa/get/phones", "1");
         });
 
         client.on("error", (err) => {
@@ -811,8 +825,50 @@
 
             console.log(`📩 ${topic}: ${val}`);
 
+            // ===== CONFIGURAÇÕES DO ESP =====
+            if (topic === "casa/config/s1") {
+                document.getElementById('s1').value = val;
+                console.log(`📊 SP Gás carregado: ${val}`);
+                return;
+            } else if (topic === "casa/config/s2") {
+                document.getElementById('s2').value = val;
+                console.log(`📊 SP Temp carregado: ${val}`);
+                return;
+            } else if (topic === "casa/config/s3") {
+                document.getElementById('s3').value = val;
+                console.log(`📊 SP Vazão carregado: ${val}`);
+                return;
+            } else if (topic === "casa/config/s4") {
+                document.getElementById('s4').value = val;
+                console.log(`📊 SP Pressão carregado: ${val}`);
+                return;
+            } else if (topic === "casa/config/s5") {
+                document.getElementById('s5').value = val;
+                console.log(`📊 SP Nível carregado: ${val}`);
+                return;
+            } else if (topic === "casa/config/s6") {
+                document.getElementById('s6').value = val;
+                console.log(`📊 Zero Gás carregado: ${val}`);
+                return;
+            } else if (topic === "casa/config/phones") {
+                try {
+                    const data = JSON.parse(val);
+                    if (Array.isArray(data)) {
+                        phones = data;
+                        renderPhones();
+                        console.log(`📱 ${phones.length} telefones carregados do ESP`);
+                        document.getElementById('syncStatus').textContent = '✅ Sincronizado!';
+                        document.getElementById('syncStatus').style.color = 'var(--green)';
+                        configLoaded = true;
+                    }
+                } catch(e) {
+                    console.log("Erro ao processar telefones:", e);
+                }
+                return;
+            }
+
             // Detecta ESP online
-            if (topic.startsWith("casa/") && !topic.includes("set/")) {
+            if (topic.startsWith("casa/") && !topic.includes("set/") && !topic.includes("config/")) {
                 isEspOnline = true;
                 lastEspPing = Date.now();
                 document.getElementById('espDot').className = 'status-dot online';
@@ -981,6 +1037,11 @@
                 document.getElementById('espLed').classList.remove('online');
                 console.log("⚠️ ESP offline!");
             }
+            
+            // Se passou 10 segundos e não carregou as configurações
+            if (!configLoaded && document.getElementById('mqttDot').className.includes('online')) {
+                document.getElementById('syncStatus').textContent = '⏳ Aguardando ESP...';
+            }
         }, 2000);
 
         // ==================== SIRENE ====================
@@ -1039,7 +1100,6 @@
             } else {
                 btn.innerText = "OFF";
                 btn.classList.remove('btn-active');
-                // Remove alarmes visuais
                 document.getElementById(type + 'A').classList.remove('alarm-on');
                 const display = document.getElementById(type + 'V');
                 if (display) display.classList.remove('alarm');
@@ -1126,7 +1186,7 @@
             }
 
             if (phones.length === 0) {
-                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum telefone</div>';
+                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum telefone cadastrado</div>';
                 return;
             }
 
@@ -1152,6 +1212,12 @@
             phones.push(full);
             renderPhones();
             client.publish('casa/set/phones', JSON.stringify(phones));
+            // Atualiza sync status
+            document.getElementById('syncStatus').textContent = '✅ Salvo no ESP!';
+            document.getElementById('syncStatus').style.color = 'var(--green)';
+            setTimeout(() => {
+                document.getElementById('syncStatus').textContent = '✅ Sincronizado!';
+            }, 2000);
             input.value = '';
         }
 
@@ -1161,6 +1227,8 @@
                 phones.splice(index, 1);
                 renderPhones();
                 client.publish('casa/set/phones', JSON.stringify(phones));
+                document.getElementById('syncStatus').textContent = '✅ Atualizado!';
+                document.getElementById('syncStatus').style.color = 'var(--green)';
             }
         }
 
@@ -1171,6 +1239,8 @@
             phones = [];
             renderPhones();
             client.publish('casa/set/phones', JSON.stringify(phones));
+            document.getElementById('syncStatus').textContent = '✅ Atualizado!';
+            document.getElementById('syncStatus').style.color = 'var(--green)';
         }
 
         // ==================== SALVAR ====================
@@ -1191,7 +1261,9 @@
             client.publish('casa/set/phones', JSON.stringify(phones));
 
             document.getElementById('modal').style.display = 'none';
-            alert('✅ Configurações salvas com sucesso!');
+            document.getElementById('syncStatus').textContent = '✅ Salvo no ESP!';
+            document.getElementById('syncStatus').style.color = 'var(--green)';
+            alert('✅ Configurações salvas no ESP com sucesso!\nTodos os dispositivos verão as alterações.');
         }
 
         // ==================== PDF ====================
@@ -1225,6 +1297,10 @@
             console.log(`PRESSÃO: ${document.getElementById('pressV').innerText}`);
             console.log(`NÍVEL: ${document.getElementById('nivelV').innerText}`);
             console.log(`PRESENÇA: ${document.getElementById('presV').innerText}`);
+            console.log(`📱 Telefones: ${phones.length}`);
+            console.log(`🔒 Lockdown: ${isLockdownActive ? 'ATIVO' : 'INATIVO'}`);
+            console.log(`📡 ESP: ${isEspOnline ? 'Online' : 'Offline'}`);
+            console.log(`🔄 Sincronizado: ${configLoaded ? 'Sim' : 'Não'}`);
         }
 
         // ==================== EVENTOS ====================
@@ -1232,19 +1308,33 @@
             document.getElementById('newPhone').addEventListener('keypress', e => { if (e.key === 'Enter') addPhone(); });
             document.getElementById('lockdownPassword').addEventListener('keypress', e => { if (e.key === 'Enter') confirmLockdown(); });
 
+            // Carrega do LocalStorage apenas como fallback (enquanto espera o ESP)
             const defaults = [2000, 50, 10, 4, 80, 0];
             ['s1', 's2', 's3', 's4', 's5', 's6'].forEach((id, i) => {
-                document.getElementById(id).value = localStorage.getItem('wellguard_' + id) || defaults[i];
+                const saved = localStorage.getItem('wellguard_' + id);
+                if (saved) {
+                    document.getElementById(id).value = saved;
+                } else {
+                    document.getElementById(id).value = defaults[i];
+                }
             });
 
             try {
                 const saved = localStorage.getItem('wellguard_phones');
-                if (saved) phones = JSON.parse(saved);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        phones = parsed;
+                        renderPhones();
+                        console.log(`📱 ${phones.length} telefones carregados do LocalStorage (fallback)`);
+                    }
+                }
             } catch (e) { phones = []; }
+
             renderPhones();
 
-            console.log("🚀 WellGuard PRO X v10.8.4 - Carregado!");
-            console.log("📡 Aguardando dados do ESP...");
+            console.log("🚀 WellGuard PRO X v10.8.5 - Sincronização Total!");
+            console.log("📡 Aguardando configurações do ESP...");
             console.log("💡 Digite 'diagnosticarSetpoints()' no console para diagnosticar");
         });
 
