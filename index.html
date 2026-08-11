@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - v10.8.2</title>
+    <title>WellGuard PRO X - v10.8.3</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js">
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
@@ -45,6 +45,43 @@
             flex-direction: column;
             position: relative;
             min-height: 100vh;
+        }
+
+        /* DIAGNÓSTICO - Barra de status */
+        .status-bar {
+            background: #0a0a0b;
+            padding: 5px 10px;
+            border-bottom: 1px solid #222;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.55rem;
+            color: #666;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .status-bar .status-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .status-bar .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #444;
+            display: inline-block;
+        }
+        .status-bar .status-dot.online {
+            background: var(--green);
+            box-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
+        }
+        .status-bar .status-dot.offline {
+            background: #444;
+        }
+        .status-bar .status-dot.error {
+            background: var(--red);
+            box-shadow: 0 0 10px rgba(255, 45, 85, 0.3);
         }
 
         .lockdown-overlay {
@@ -139,18 +176,6 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.3; }
         }
-        .header h1 .esp-status {
-            font-size: 0.5rem;
-            color: #666;
-            font-weight: 300;
-            letter-spacing: 0px;
-        }
-        .header h1 .esp-status.online {
-            color: var(--green);
-        }
-        .header h1 .esp-status.offline {
-            color: #666;
-        }
 
         .led-group {
             display: flex;
@@ -175,13 +200,6 @@
         #espLed.online {
             background: var(--green);
             box-shadow: 0 0 8px var(--green);
-        }
-
-        .header-buttons {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
         }
 
         .instrument-grid {
@@ -564,20 +582,34 @@
 <body>
 
     <div class="container" id="mainContainer">
+        <!-- BARRA DE STATUS - DIAGNÓSTICO -->
+        <div class="status-bar">
+            <div class="status-item">
+                <span>🔌 MQTT:</span>
+                <span class="status-dot offline" id="mqttDot"></span>
+                <span id="mqttStatus">Desconectado</span>
+            </div>
+            <div class="status-item">
+                <span>📡 ESP:</span>
+                <span class="status-dot offline" id="espDot"></span>
+                <span id="espStatusText">Aguardando...</span>
+            </div>
+            <div class="status-item">
+                <span id="msgCount">📨 0 msgs</span>
+            </div>
+        </div>
+
         <div class="lockdown-overlay" id="lockdownOverlay"></div>
 
         <div class="header">
-            <h1 id="headerTitle">
-                WELLGUARD PRO X 
-                <span class="esp-status offline" id="espStatusLabel">[⏳ aguardando ESP]</span>
-            </h1>
+            <h1 id="headerTitle">WELLGUARD PRO X</h1>
 
             <div class="header-buttons">
                 <div class="led-group">
                     <div class="led-item"><div id="webLed" class="led"></div>WEB</div>
                     <div class="led-item"><div id="espLed" class="led"></div>ESP</div>
                 </div>
-                <button id="fullBtn" onclick="toggleFullscreen()" class="btn-secondary" title="Tela Cheia">⛶</button>
+                <button id="fullBtn" onclick="toggleFullscreen()" class="btn-secondary">⛶</button>
                 <button id="muteBtn" onclick="toggleMute()" class="btn-secondary">MUTE</button>
             </div>
         </div>
@@ -644,10 +676,8 @@
         </div>
     </div>
 
-    <!-- Botão LOCKDOWN - Marca D'água -->
-    <button id="lockdownBtn" class="lockdown-watermark" onclick="toggleLockdown()">
-        ⚡ LOCKDOWN
-    </button>
+    <!-- Botão LOCKDOWN -->
+    <button id="lockdownBtn" class="lockdown-watermark" onclick="toggleLockdown()">⚡ LOCKDOWN</button>
     <div id="lockdownStatus" class="lockdown-status">🔒 sistema seguro</div>
 
     <!-- Modal Lockdown -->
@@ -658,17 +688,17 @@
             <p style="color:#888; font-size:0.8rem; margin-bottom:10px;">
                 <span id="lockdownDesc">Digite a senha para ATIVAR o bloqueio total do sistema</span>
             </p>
-            <input type="password" id="lockdownPassword" placeholder="Digite a senha de segurança" style="text-align:center; font-size:1rem;">
-            <div id="lockdown_msg">Senha incorreta! Tente novamente.</div>
+            <input type="password" id="lockdownPassword" placeholder="Digite a senha" style="text-align:center; font-size:1rem;">
+            <div id="lockdown_msg">Senha incorreta!</div>
             <button class="btn-lockdown-confirm" onclick="confirmLockdown()">✓ CONFIRMAR</button>
             <button class="btn-lockdown-cancel" onclick="closeLockdownModal()">✕ CANCELAR</button>
         </div>
     </div>
 
-    <!-- Modal Configurações -->
+    <!-- Modal Config -->
     <div id="modal" class="modal">
         <div class="modal-content">
-            <h3 style="color:var(--cyan); font-size:0.8rem; margin-bottom:10px; text-align:center;">CONFIGURAÇÕES</h3>
+            <h3 style="color:var(--cyan); text-align:center;">CONFIGURAÇÕES</h3>
             <label>SP GÁS</label><input type="number" id="s1">
             <label>SP TEMP</label><input type="number" id="s2">
             <label>SP VAZÃO</label><input type="number" id="s3">
@@ -676,460 +706,96 @@
             <label>SP NÍVEL</label><input type="number" id="s5">
             <label>ZERO GÁS</label><input type="number" id="s6">
 
-            <hr style="border:0; border-top:1px solid #222; margin:10px 0;">
+            <hr>
 
-            <!-- Status da API (somente visualização) -->
             <div style="margin-bottom:10px;">
-                <label style="color:var(--green);">📡 STATUS DA API SMS</label>
+                <label style="color:var(--green);">📡 STATUS DA API</label>
                 <div class="api-status">
-                    <span class="status-label">🔐 API APIBrasil</span>
+                    <span class="status-label">🔐 APIBrasil</span>
                     <div class="status-indicator">
-                        <span class="status-dot" id="apiStatusDot"></span>
-                        <span class="status-text" id="apiStatusText">✅ Configurada</span>
+                        <span class="status-dot"></span>
+                        <span class="status-text">✅ Configurada</span>
                     </div>
                 </div>
-                <div style="font-size:0.6rem; color:#666; text-align:center; margin-top:-5px;">
-                    Credenciais fixas no sistema • Não editável
-                </div>
             </div>
 
-            <!-- Área de Telefones -->
-            <div style="border-top:1px solid #222; padding-top:10px; margin-top:10px;">
-                <label style="color:var(--green);">📱 TELEFONES CADASTRADOS</label>
-                
-                <div class="phone-counter">
-                    <span id="phoneCount">0</span> / 10 números
-                </div>
-                
-                <div id="limitWarning" class="limit-warning">
-                    ⚠️ LIMITE MÁXIMO DE 10 TELEFONES ATINGIDO!<br>
-                    <small>Procure o Programador para aumentar o limite.</small>
-                </div>
-
+            <div style="border-top:1px solid #222; padding-top:10px;">
+                <label style="color:var(--green);">📱 TELEFONES</label>
+                <div class="phone-counter"><span id="phoneCount">0</span> / 10</div>
+                <div id="limitWarning" class="limit-warning">⚠️ LIMITE ATINGIDO! Procure o Programador.</div>
                 <div id="phoneList" class="phone-list"></div>
-
                 <div class="phone-input-wrapper">
                     <span class="prefix">+55</span>
-                    <input type="text" id="newPhone" placeholder="DDD + Número (ex: 11999999999)">
+                    <input type="text" id="newPhone" placeholder="DDD + Número">
                 </div>
-                
                 <div style="display:flex; gap:5px;">
                     <button onclick="addPhone()" id="addPhoneBtn" class="btn-add-phone" style="flex:1;">➕ ADICIONAR</button>
-                    <button onclick="removeAllPhones()" class="btn-remove-all" style="flex:1;">🗑️ REMOVER TODOS</button>
+                    <button onclick="removeAllPhones()" class="btn-remove-all" style="flex:1;">🗑️ REMOVER</button>
                 </div>
             </div>
 
-            <button onclick="save()" style="background:var(--cyan); color:#000; width:100%; margin-top:5px;">💾 SALVAR CONFIGURAÇÕES</button>
+            <button onclick="save()" style="background:var(--cyan); color:#000; width:100%; margin-top:10px;">💾 SALVAR</button>
             <button onclick="document.getElementById('modal').style.display='none'" style="background:none; color:#888; width:100%; margin-top:5px;">VOLTAR</button>
         </div>
     </div>
 
     <script>
-        // ==================== CONFIGURAÇÕES FIXAS DA API ====================
+        // ==================== CONFIG ====================
         const API_CONFIG = {
             url: "https://api.apibrasil.com.br/v1/sms/send",
             token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2FwcC5hcGlicmFzaWwuaW8vYXBpL3YyL2F1dGgvbG9naW4iLCJpYXQiOjE3ODY0NzUyNDUsImV4cCI6MTgxODAxMTI0NSwibmJmIjoxNzg2NDc1MjQ1LCJqdGkiOiJkNDhGQlJ4YUl0a3habElhIiwic3ViIjoiNTc4NDMifQ.gSTGlKQWMx_HagwpQ10fYdYpZEDrHRo8stuIPGLYZwY"
         };
-        // ====================================================================
 
-        const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
-        let espTimeout = null,
-            audioCtx = null,
-            sirenInterval = null,
-            isMuted = false;
-        const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
-        let phones = [];
+        // ==================== VARIÁVEIS ====================
+        let msgCount = 0;
         let isLockdownActive = false;
-        let isLockdownModalOpen = false;
-        
+        let phones = [];
         let isEspOnline = false;
-        let hasReceivedData = {
-            gas: false,
-            temp: false,
-            flow: false,
-            press: false,
-            nivel: false,
-            pres: false
-        };
         let lastEspPing = 0;
         const ESP_TIMEOUT = 5000;
-        let configLoaded = false;
 
-        // ==================== CARREGAR CONFIGURAÇÕES DO ESP ====================
-        function loadConfigFromESP() {
-            // Solicita as configurações atuais do ESP
-            client.publish("casa/get/config", "1");
-            client.publish("casa/get/phones", "1");
-        }
-
-        // ==================== RECEBER CONFIGURAÇÕES DO ESP ====================
-        function applyConfigFromESP(topic, value) {
-            if (topic === "casa/config/s1") {
-                document.getElementById('s1').value = value;
-            } else if (topic === "casa/config/s2") {
-                document.getElementById('s2').value = value;
-            } else if (topic === "casa/config/s3") {
-                document.getElementById('s3').value = value;
-            } else if (topic === "casa/config/s4") {
-                document.getElementById('s4').value = value;
-            } else if (topic === "casa/config/s5") {
-                document.getElementById('s5').value = value;
-            } else if (topic === "casa/config/s6") {
-                document.getElementById('s6').value = value;
-            } else if (topic === "casa/config/phones") {
-                try {
-                    const data = JSON.parse(value);
-                    if (Array.isArray(data)) {
-                        phones = data;
-                        renderPhones();
-                    }
-                } catch(e) {
-                    console.log("Erro ao processar lista de telefones:", e);
-                }
-            }
-        }
-
-        function updateEspStatus() {
-            const statusLabel = document.getElementById('espStatusLabel');
-            const espLed = document.getElementById('espLed');
-            
-            if (isEspOnline) {
-                statusLabel.className = 'esp-status online';
-                statusLabel.textContent = '[🟢 ESP online]';
-                espLed.classList.add('online');
-            } else {
-                statusLabel.className = 'esp-status offline';
-                statusLabel.textContent = '[⏳ aguardando ESP]';
-                espLed.classList.remove('online');
-            }
-        }
-
-        function updateSensorStatus(sensor) {
-            const statusEl = document.getElementById(sensor + 'Status');
-            const displayEl = document.getElementById(sensor + 'V');
-            const barEl = document.getElementById(sensor + 'B');
-            
-            if (isEspOnline && hasReceivedData[sensor]) {
-                statusEl.className = 'sensor-status online';
-                statusEl.textContent = '🟢';
-                displayEl.classList.remove('waiting');
-                barEl.classList.remove('waiting');
-            } else {
-                statusEl.className = 'sensor-status waiting';
-                statusEl.textContent = '⏳';
-                displayEl.classList.add('waiting');
-                barEl.classList.add('waiting');
-            }
-        }
-
-        function toggleLockdown() {
-            if (isLockdownActive) {
-                document.getElementById('lockdownModalTitle').textContent = 'DESATIVAR LOCKDOWN';
-                document.getElementById('lockdownDesc').textContent = 'Digite a senha para DESATIVAR o bloqueio total do sistema';
-                document.getElementById('lockdownModal').style.display = 'flex';
-                document.getElementById('lockdownPassword').value = '';
-                document.getElementById('lockdown_msg').style.display = 'none';
-                isLockdownModalOpen = true;
-            } else {
-                document.getElementById('lockdownModalTitle').textContent = 'ATIVAR LOCKDOWN';
-                document.getElementById('lockdownDesc').textContent = 'Digite a senha para ATIVAR o bloqueio total do sistema';
-                document.getElementById('lockdownModal').style.display = 'flex';
-                document.getElementById('lockdownPassword').value = '';
-                document.getElementById('lockdown_msg').style.display = 'none';
-                isLockdownModalOpen = true;
-            }
-        }
-
-        function confirmLockdown() {
-            const password = document.getElementById('lockdownPassword').value;
-            const correctPassword = "iptu676466";
-
-            if (password === correctPassword) {
-                isLockdownActive = !isLockdownActive;
-                applyLockdownState();
-                closeLockdownModal();
-                client.publish("casa/set/lockdown", isLockdownActive ? "1" : "0");
-            } else {
-                document.getElementById('lockdown_msg').style.display = 'block';
-                document.getElementById('lockdownPassword').value = '';
-                document.getElementById('lockdownPassword').focus();
-            }
-        }
-
-        function applyLockdownState() {
-            const btn = document.getElementById('lockdownBtn');
-            const status = document.getElementById('lockdownStatus');
-            const overlay = document.getElementById('lockdownOverlay');
-            const title = document.getElementById('headerTitle');
-            const instruments = document.querySelectorAll('.instrument');
-
-            if (isLockdownActive) {
-                btn.classList.add('active');
-                btn.textContent = '⚡ LOCKDOWN 🔒';
-                status.classList.add('active');
-                status.textContent = '🔒 sistema bloqueado';
-                overlay.classList.add('active');
-                title.classList.add('lockdown-active');
-                title.innerHTML = '🔒 LOCKDOWN ATIVO <span class="esp-status offline">[🔒]</span>';
-                
-                instruments.forEach(inst => inst.classList.add('lockdown'));
-                document.querySelectorAll('.btn-toggle').forEach(btn => {
-                    btn.disabled = true;
-                    btn.style.opacity = '0.5';
-                    btn.style.cursor = 'not-allowed';
-                });
-                document.querySelectorAll('.footer-btns button').forEach(btn => {
-                    btn.disabled = true;
-                    btn.style.opacity = '0.5';
-                    btn.style.cursor = 'not-allowed';
-                });
-            } else {
-                btn.classList.remove('active');
-                btn.textContent = '⚡ LOCKDOWN';
-                status.classList.remove('active');
-                status.textContent = '🔒 sistema seguro';
-                overlay.classList.remove('active');
-                title.classList.remove('lockdown-active');
-                title.innerHTML = 'WELLGUARD PRO X <span class="esp-status offline" id="espStatusLabel">[⏳ aguardando ESP]</span>';
-                
-                instruments.forEach(inst => inst.classList.remove('lockdown'));
-                document.querySelectorAll('.btn-toggle').forEach(btn => {
-                    btn.disabled = false;
-                    btn.style.opacity = '1';
-                    btn.style.cursor = 'pointer';
-                });
-                document.querySelectorAll('.footer-btns button').forEach(btn => {
-                    btn.disabled = false;
-                    btn.style.opacity = '1';
-                    btn.style.cursor = 'pointer';
-                });
-                updateEspStatus();
-            }
-        }
-
-        function closeLockdownModal() {
-            document.getElementById('lockdownModal').style.display = 'none';
-            isLockdownModalOpen = false;
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('lockdownPassword').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    confirmLockdown();
-                }
-            });
-        });
-
-        function initAudio() {
-            if (!audioCtx) audioCtx = new(window.AudioContext || window.webkitAudioContext)();
-        }
-
-        function toggleFullscreen() {
-            const btn = document.getElementById('fullBtn');
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().then(() => {
-                    btn.innerHTML = '⤢';
-                }).catch(err => console.log(err));
-            } else {
-                document.exitFullscreen().then(() => {
-                    btn.innerHTML = '⛶';
-                });
-            }
-        }
-
-        document.addEventListener('fullscreenchange', () => {
-            const btn = document.getElementById('fullBtn');
-            btn.innerHTML = document.fullscreenElement ? '⤢' : '⛶';
-        });
-
-        function toggleMute() {
-            if (isLockdownActive) return;
-            isMuted = !isMuted;
-            document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
-            client.publish("casa/set/mute", isMuted ? "1" : "0");
-            checkSirenStatus();
-        }
-
-        function toggleSensor(type) {
-            if (isLockdownActive) return;
-            sensorStatus[type] = !sensorStatus[type];
-            const btn = document.getElementById(type + 'Tgl');
-            const alarmDiv = document.getElementById(type + 'A');
-            if (sensorStatus[type]) {
-                btn.innerText = "ON";
-                btn.classList.add('btn-active');
-            } else {
-                btn.innerText = "OFF";
-                btn.classList.remove('btn-active');
-                alarmDiv.classList.remove('alarm-on');
-            }
-            client.publish(`casa/set/${type}_on`, sensorStatus[type] ? "1" : "0");
-            checkSirenStatus();
-        }
-
-        function checkSirenStatus() {
-            const anyAlarm = document.querySelectorAll('.alarm-on').length > 0;
-            if (!anyAlarm || isMuted) {
-                if (sirenInterval) { clearInterval(sirenInterval);
-                    sirenInterval = null; }
-            } else { playSiren(); }
-            if (!anyAlarm) { client.publish("casa/set/mute", "1"); } else if (!isMuted) { client.publish("casa/set/mute",
-                    "0"); }
-        }
-
-        function playSiren() {
-            initAudio();
-            if (!sirenInterval && audioCtx) {
-                sirenInterval = setInterval(() => {
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.value = (Math.floor(Date.now() / 400) % 2 == 0) ? 950 : 650;
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-                    osc.start();
-                    osc.stop(audioCtx.currentTime + 0.4);
-                }, 400);
-            }
-        }
-
-        function renderPhones() {
-            const list = document.getElementById('phoneList');
-            const count = document.getElementById('phoneCount');
-            const warning = document.getElementById('limitWarning');
-            const addBtn = document.getElementById('addPhoneBtn');
-
-            count.textContent = phones.length;
-
-            if (phones.length >= 10) {
-                warning.style.display = 'block';
-                addBtn.disabled = true;
-            } else {
-                warning.style.display = 'none';
-                addBtn.disabled = false;
-            }
-
-            if (phones.length === 0) {
-                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum telefone cadastrado</div>';
-                return;
-            }
-
-            list.innerHTML = phones.map((phone, index) => `
-                <div class="phone-item">
-                    <span>${phone}</span>
-                    <button class="remove-phone" onclick="removePhone(${index})">✕</button>
-                </div>
-            `).join('');
-        }
-
-        function addPhone() {
-            if (isLockdownActive) return;
-            const input = document.getElementById('newPhone');
-            let phone = input.value.trim();
-
-            if (!phone) {
-                alert('Por favor, insira um número de telefone.');
-                return;
-            }
-
-            phone = phone.replace(/\s/g, '').replace(/[\(\)\-]/g, '');
-            if (phone.startsWith('+55')) phone = phone.substring(3);
-            if (phone.startsWith('55')) phone = phone.substring(2);
-
-            if (phone.length < 10) {
-                alert('Número inválido! Formato: DDD + número (ex: 11999999999)');
-                return;
-            }
-
-            const fullPhone = '+55' + phone;
-            if (phones.length >= 10) {
-                alert('⚠️ Limite máximo de 10 telefones atingido! Procure o Programador.');
-                return;
-            }
-            if (phones.includes(fullPhone)) {
-                alert('Este telefone já está cadastrado!');
-                return;
-            }
-
-            phones.push(fullPhone);
-            renderPhones();
-            input.value = '';
-            input.focus();
-            // Salva no ESP
-            client.publish('casa/set/phones', JSON.stringify(phones));
-        }
-
-        function removePhone(index) {
-            if (isLockdownActive) return;
-            if (confirm(`Deseja remover o telefone ${phones[index]}?`)) {
-                phones.splice(index, 1);
-                renderPhones();
-                client.publish('casa/set/phones', JSON.stringify(phones));
-            }
-        }
-
-        function removeAllPhones() {
-            if (isLockdownActive) return;
-            if (phones.length === 0) {
-                alert('Não há telefones para remover.');
-                return;
-            }
-            if (confirm('⚠️ Tem certeza que deseja remover TODOS os telefones cadastrados?')) {
-                phones = [];
-                renderPhones();
-                client.publish('casa/set/phones', JSON.stringify(phones));
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            const input = document.getElementById('newPhone');
-            input.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    addPhone();
-                }
-            });
-        });
+        // ==================== MQTT ====================
+        console.log("🔄 Conectando ao MQTT...");
+        const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
 
         client.on("connect", () => {
+            console.log("✅ MQTT Conectado!");
             document.getElementById('webLed').classList.add('online');
-            client.subscribe("casa/set/#");
-            client.subscribe("casa/status/#");
-            client.subscribe("casa/config/#");
-            client.subscribe("casa/gas/#");
-            client.subscribe("casa/temp/#");
-            client.subscribe("casa/fluxo/#");
-            client.subscribe("casa/pressao/#");
-            client.subscribe("casa/nivel/#");
-            client.subscribe("casa/presenca/#");
-            client.publish("casa/get/lockdown", "1");
+            document.getElementById('mqttDot').className = 'status-dot online';
+            document.getElementById('mqttStatus').textContent = 'Conectado';
+            
+            client.subscribe("casa/#");
+            console.log("📡 Inscrito em casa/#");
             
             // Envia configuração da API
             client.publish('casa/set/sms_url', API_CONFIG.url);
             client.publish('casa/set/sms_token', API_CONFIG.token);
-            
-            // Solicita configurações atuais
-            setTimeout(() => {
-                loadConfigFromESP();
-            }, 1000);
+        });
+
+        client.on("error", (err) => {
+            console.log("❌ Erro MQTT:", err);
+            document.getElementById('mqttDot').className = 'status-dot error';
+            document.getElementById('mqttStatus').textContent = 'Erro!';
         });
 
         client.on("message", (t, m) => {
             const topic = t.toString();
             const val = m.toString();
+            msgCount++;
+            document.getElementById('msgCount').textContent = `📨 ${msgCount} msgs`;
+            
+            console.log(`📩 ${topic}: ${val}`);
 
-            // ==================== CONFIGURAÇÕES DO ESP ====================
-            if (topic.startsWith("casa/config/")) {
-                applyConfigFromESP(topic, val);
-                return;
-            }
-
+            // Detecta ESP online
             if (topic.startsWith("casa/") && !topic.includes("set/")) {
                 isEspOnline = true;
                 lastEspPing = Date.now();
-                updateEspStatus();
+                document.getElementById('espDot').className = 'status-dot online';
+                document.getElementById('espStatusText').textContent = 'Online';
+                document.getElementById('espLed').classList.add('online');
             }
 
+            // Lockdown
             if (topic === "casa/status/lockdown") {
                 isLockdownActive = (val === "1");
                 applyLockdownState();
@@ -1140,150 +806,233 @@
 
             const num = parseFloat(val);
 
+            // Processa dados
             if (topic.includes("gas/vazamento")) {
-                hasReceivedData.gas = true;
-                updateSensorStatus('gas');
                 const sp = parseInt(document.getElementById('s1').value) || 2000;
                 const real = Math.max(0, num - (parseInt(document.getElementById('s6').value) || 0));
                 document.getElementById('gasV').innerText = real.toString().padStart(4, '0');
                 document.getElementById('gasB').style.width = Math.min((real / sp) * 100, 100) + "%";
-                document.getElementById('gasA').classList.toggle('alarm-on', real >= sp && sensorStatus.gas && isEspOnline);
-                
+                document.getElementById('gasStatus').textContent = '🟢';
+                document.getElementById('gasStatus').className = 'sensor-status online';
+                document.getElementById('gasV').classList.remove('waiting');
+                document.getElementById('gasB').classList.remove('waiting');
             } else if (topic.includes("temp/ambiente")) {
-                hasReceivedData.temp = true;
-                updateSensorStatus('temp');
                 const sp = parseFloat(document.getElementById('s2').value) || 50;
                 document.getElementById('tempV').innerText = num.toFixed(1);
                 document.getElementById('tempB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('tempA').classList.toggle('alarm-on', num >= sp && sensorStatus.temp && isEspOnline);
-                
+                document.getElementById('tempStatus').textContent = '🟢';
+                document.getElementById('tempStatus').className = 'sensor-status online';
+                document.getElementById('tempV').classList.remove('waiting');
+                document.getElementById('tempB').classList.remove('waiting');
             } else if (topic.includes("fluxo/agua")) {
-                hasReceivedData.flow = true;
-                updateSensorStatus('flow');
                 const sp = parseFloat(document.getElementById('s3').value) || 10;
                 document.getElementById('flowV').innerText = num.toFixed(1);
                 document.getElementById('flowB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('flowA').classList.toggle('alarm-on', num >= sp && sensorStatus.flow && isEspOnline);
-                
+                document.getElementById('flowStatus').textContent = '🟢';
+                document.getElementById('flowStatus').className = 'sensor-status online';
+                document.getElementById('flowV').classList.remove('waiting');
+                document.getElementById('flowB').classList.remove('waiting');
             } else if (topic.includes("pressao/agua")) {
-                hasReceivedData.press = true;
-                updateSensorStatus('press');
                 const sp = parseFloat(document.getElementById('s4').value) || 4;
                 document.getElementById('pressV').innerText = num.toFixed(2);
                 document.getElementById('pressB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('pressA').classList.toggle('alarm-on', num >= sp && sensorStatus.press && isEspOnline);
-                
+                document.getElementById('pressStatus').textContent = '🟢';
+                document.getElementById('pressStatus').className = 'sensor-status online';
+                document.getElementById('pressV').classList.remove('waiting');
+                document.getElementById('pressB').classList.remove('waiting');
             } else if (topic.includes("nivel/caixa")) {
-                hasReceivedData.nivel = true;
-                updateSensorStatus('nivel');
                 const sp = parseFloat(document.getElementById('s5').value) || 80;
                 document.getElementById('nivelV').innerText = num.toFixed(1);
                 document.getElementById('nivelB').style.width = Math.min(num, 100) + "%";
-                document.getElementById('nivelA').classList.toggle('alarm-on', num >= sp && sensorStatus.nivel && isEspOnline);
-                
+                document.getElementById('nivelStatus').textContent = '🟢';
+                document.getElementById('nivelStatus').className = 'sensor-status online';
+                document.getElementById('nivelV').classList.remove('waiting');
+                document.getElementById('nivelB').classList.remove('waiting');
             } else if (topic.includes("presenca/status")) {
-                hasReceivedData.pres = true;
-                updateSensorStatus('pres');
                 const det = (val === "DETECTADO");
                 document.getElementById('presV').innerText = det ? "ALERT" : "OK";
                 document.getElementById('presV').style.color = det ? "#ff2d55" : "#00f5ff";
-                document.getElementById('presA').classList.toggle('alarm-on', det && sensorStatus.pres && isEspOnline);
+                document.getElementById('presStatus').textContent = '🟢';
+                document.getElementById('presStatus').className = 'sensor-status online';
+                document.getElementById('presV').classList.remove('waiting');
             }
-            
-            checkSirenStatus();
         });
 
+        // Verifica se o ESP caiu
         setInterval(() => {
             if (isEspOnline && (Date.now() - lastEspPing > ESP_TIMEOUT)) {
                 isEspOnline = false;
-                updateEspStatus();
-                ['gas', 'temp', 'flow', 'press', 'nivel', 'pres'].forEach(s => {
-                    hasReceivedData[s] = false;
-                    updateSensorStatus(s);
-                    document.getElementById(s + 'V').classList.add('waiting');
-                    document.getElementById(s + 'B').classList.add('waiting');
-                });
-                document.querySelectorAll('.alarm').forEach(el => el.classList.remove('alarm-on'));
+                document.getElementById('espDot').className = 'status-dot offline';
+                document.getElementById('espStatusText').textContent = 'Offline';
+                document.getElementById('espLed').classList.remove('online');
+                console.log("⚠️ ESP offline!");
             }
         }, 2000);
 
-        function save() {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Desative para salvar configurações.');
-                return;
+        // ==================== FUNÇÕES ====================
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
             }
-
-            const configs = {
-                s1: document.getElementById('s1').value,
-                s2: document.getElementById('s2').value,
-                s3: document.getElementById('s3').value,
-                s4: document.getElementById('s4').value,
-                s5: document.getElementById('s5').value,
-                s6: document.getElementById('s6').value
-            };
-
-            // Salva cada configuração no ESP
-            for (let id in configs) {
-                client.publish('casa/set/' + id, configs[id]);
-            }
-
-            // Salva a lista de telefones
-            client.publish('casa/set/phones', JSON.stringify(phones));
-
-            document.getElementById('modal').style.display = 'none';
-            alert('✅ Configurações salvas no ESP com sucesso!\nTodos os dispositivos verão as alterações.');
         }
 
-        window.onload = () => {
-            const keys = ['s1', 's2', 's3', 's4', 's5', 's6'];
-            const defaults = [2000, 50, 10, 4, 80, 0];
-            keys.forEach((k, i) => {
-                const saved = localStorage.getItem('wellguard_v10_' + k);
-                if (saved) {
-                    document.getElementById(k).value = saved;
-                } else {
-                    document.getElementById(k).value = defaults[i];
-                }
-            });
+        function toggleMute() {
+            client.publish("casa/set/mute", "1");
+        }
 
-            loadPhones();
-            applyLockdownState();
-            updateEspStatus();
-            
-            console.log('🔐 API configurada com credenciais fixas');
-            console.log('📡 Aguardando configurações do ESP...');
-        };
+        function toggleSensor(type) {
+            const btn = document.getElementById(type + 'Tgl');
+            const isOn = btn.textContent === "ON";
+            btn.textContent = isOn ? "OFF" : "ON";
+            btn.classList.toggle('btn-active');
+            client.publish(`casa/set/${type}_on`, isOn ? "0" : "1");
+        }
 
-        function loadPhones() {
-            try {
-                const saved = localStorage.getItem('wellguard_phones');
-                if (saved) {
-                    phones = JSON.parse(saved);
-                    if (!Array.isArray(phones)) phones = [];
-                } else {
-                    phones = [];
-                }
-            } catch (e) {
-                phones = [];
+        function toggleLockdown() {
+            document.getElementById('lockdownModal').style.display = 'flex';
+        }
+
+        function confirmLockdown() {
+            const pwd = document.getElementById('lockdownPassword').value;
+            if (pwd === "iptu676466") {
+                isLockdownActive = !isLockdownActive;
+                client.publish("casa/set/lockdown", isLockdownActive ? "1" : "0");
+                applyLockdownState();
+                closeLockdownModal();
+            } else {
+                document.getElementById('lockdown_msg').style.display = 'block';
             }
+        }
+
+        function applyLockdownState() {
+            const btn = document.getElementById('lockdownBtn');
+            const overlay = document.getElementById('lockdownOverlay');
+            const title = document.getElementById('headerTitle');
+            const instruments = document.querySelectorAll('.instrument');
+
+            if (isLockdownActive) {
+                btn.classList.add('active');
+                btn.textContent = '⚡ LOCKDOWN 🔒';
+                overlay.classList.add('active');
+                title.textContent = '🔒 LOCKDOWN ATIVO';
+                instruments.forEach(inst => inst.classList.add('lockdown'));
+                document.querySelectorAll('.btn-toggle').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+                document.querySelectorAll('.footer-btns button').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = '⚡ LOCKDOWN';
+                overlay.classList.remove('active');
+                title.textContent = 'WELLGUARD PRO X';
+                instruments.forEach(inst => inst.classList.remove('lockdown'));
+                document.querySelectorAll('.btn-toggle').forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+                document.querySelectorAll('.footer-btns button').forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+            }
+        }
+
+        function closeLockdownModal() {
+            document.getElementById('lockdownModal').style.display = 'none';
+            document.getElementById('lockdownPassword').value = '';
+            document.getElementById('lockdown_msg').style.display = 'none';
+        }
+
+        // ==================== TELEFONES ====================
+        function renderPhones() {
+            const list = document.getElementById('phoneList');
+            const count = document.getElementById('phoneCount');
+            count.textContent = phones.length;
+            if (phones.length === 0) {
+                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum telefone</div>';
+                return;
+            }
+            list.innerHTML = phones.map((p, i) => `
+                <div class="phone-item">
+                    <span>${p}</span>
+                    <button class="remove-phone" onclick="removePhone(${i})">✕</button>
+                </div>
+            `).join('');
+        }
+
+        function addPhone() {
+            const input = document.getElementById('newPhone');
+            let phone = input.value.trim().replace(/\s/g, '').replace(/[\(\)\-]/g, '');
+            if (!phone) { alert('Digite um número'); return; }
+            if (phone.startsWith('+55')) phone = phone.substring(3);
+            if (phone.startsWith('55')) phone = phone.substring(2);
+            if (phone.length < 10) { alert('Número inválido!'); return; }
+            const full = '+55' + phone;
+            if (phones.includes(full)) { alert('Já cadastrado!'); return; }
+            if (phones.length >= 10) { alert('Limite atingido!'); return; }
+            phones.push(full);
             renderPhones();
+            client.publish('casa/set/phones', JSON.stringify(phones));
+            input.value = '';
         }
 
+        function removePhone(index) {
+            phones.splice(index, 1);
+            renderPhones();
+            client.publish('casa/set/phones', JSON.stringify(phones));
+        }
+
+        function removeAllPhones() {
+            if (!confirm('Remover TODOS?')) return;
+            phones = [];
+            renderPhones();
+            client.publish('casa/set/phones', JSON.stringify(phones));
+        }
+
+        // ==================== SALVAR ====================
+        function save() {
+            const configs = ['s1','s2','s3','s4','s5','s6'];
+            configs.forEach(id => {
+                const val = document.getElementById(id).value;
+                client.publish('casa/set/' + id, val);
+            });
+            client.publish('casa/set/phones', JSON.stringify(phones));
+            document.getElementById('modal').style.display = 'none';
+            alert('✅ Configurações salvas!');
+        }
+
+        // ==================== PDF ====================
         function generatePDF() {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Não é possível gerar PDF.');
-                return;
-            }
-            
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             doc.text("RELATORIO WELLGUARD PRO X", 20, 20);
-            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 30);
-            phones.forEach((phone, i) => {
-                doc.text(`${i+1}. ${phone}`, 20, 40 + (i * 10));
-            });
+            doc.text(`Telefones: ${phones.length}`, 20, 30);
+            phones.forEach((p, i) => doc.text(`${i+1}. ${p}`, 20, 40 + i*10));
             doc.save("Relatorio.pdf");
         }
+
+        // ==================== EVENTOS ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('newPhone').addEventListener('keypress', e => { if (e.key === 'Enter') addPhone(); });
+            document.getElementById('lockdownPassword').addEventListener('keypress', e => { if (e.key === 'Enter') confirmLockdown(); });
+            
+            const defaults = [2000, 50, 10, 4, 80, 0];
+            ['s1','s2','s3','s4','s5','s6'].forEach((id, i) => {
+                document.getElementById(id).value = localStorage.getItem('wellguard_'+id) || defaults[i];
+            });
+            
+            // Carrega telefones do localStorage
+            try {
+                const saved = localStorage.getItem('wellguard_phones');
+                if (saved) phones = JSON.parse(saved);
+            } catch(e) { phones = []; }
+            renderPhones();
+            
+            console.log("🚀 Página carregada!");
+            console.log("📡 Aguardando dados do ESP...");
+        });
+
+        // Fecha modal com ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.getElementById('modal').style.display = 'none';
+                document.getElementById('lockdownModal').style.display = 'none';
+            }
+        });
     </script>
 </body>
 </html>
