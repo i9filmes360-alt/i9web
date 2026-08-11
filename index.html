@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - v10.8.5</title>
+    <title>WellGuard PRO X - v10.8.6</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js">
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
@@ -607,7 +607,6 @@
 <body>
 
     <div class="container" id="mainContainer">
-        <!-- BARRA DE STATUS - DIAGNÓSTICO -->
         <div class="status-bar">
             <div class="status-item">
                 <span>🔌 MQTT:</span>
@@ -631,7 +630,6 @@
 
         <div class="header">
             <h1 id="headerTitle">WELLGUARD PRO X</h1>
-
             <div class="header-buttons">
                 <div class="led-group">
                     <div class="led-item"><div id="webLed" class="led"></div>WEB</div>
@@ -704,11 +702,9 @@
         </div>
     </div>
 
-    <!-- Botão LOCKDOWN -->
     <button id="lockdownBtn" class="lockdown-watermark" onclick="toggleLockdown()">⚡ LOCKDOWN</button>
     <div id="lockdownStatus" class="lockdown-status">🔒 sistema seguro</div>
 
-    <!-- Modal Lockdown -->
     <div id="lockdownModal" class="modal lockdown-modal">
         <div class="modal-content">
             <div class="icon">🔒</div>
@@ -723,7 +719,6 @@
         </div>
     </div>
 
-    <!-- Modal Config -->
     <div id="modal" class="modal">
         <div class="modal-content">
             <h3 style="color:var(--cyan); text-align:center;">CONFIGURAÇÕES</h3>
@@ -768,13 +763,11 @@
     </div>
 
     <script>
-        // ==================== CONFIG ====================
         const API_CONFIG = {
             url: "https://api.apibrasil.com.br/v1/sms/send",
             token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2FwcC5hcGlicmFzaWwuaW8vYXBpL3YyL2F1dGgvbG9naW4iLCJpYXQiOjE3ODY0NzUyNDUsImV4cCI6MTgxODAxMTI0NSwibmJmIjoxNzg2NDc1MjQ1LCJqdGkiOiJkNDhGQlJ4YUl0a3habElhIiwic3ViIjoiNTc4NDMifQ.gSTGlKQWMx_HagwpQ10fYdYpZEDrHRo8stuIPGLYZwY"
         };
 
-        // ==================== VARIÁVEIS ====================
         let msgCount = 0;
         let isLockdownActive = false;
         let phones = [];
@@ -784,12 +777,10 @@
         let sirenInterval = null;
         let audioCtx = null;
         let configLoaded = false;
+        let syncAttempts = 0;
         const ESP_TIMEOUT = 5000;
-
         const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
 
-        // ==================== MQTT ====================
-        console.log("🔄 Conectando ao MQTT...");
         const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
 
         client.on("connect", () => {
@@ -803,19 +794,58 @@
 
             client.publish('casa/set/sms_url', API_CONFIG.url);
             client.publish('casa/set/sms_token', API_CONFIG.token);
-            
-            // SOLICITA CONFIGURAÇÕES DO ESP
+
             document.getElementById('syncStatus').textContent = '🔄 Buscando configurações...';
             document.getElementById('syncStatus').style.color = 'var(--yellow)';
+            
+            // Pede configurações para o ESP
             client.publish("casa/get/config", "1");
             client.publish("casa/get/phones", "1");
+            
+            // Se não receber resposta em 5 segundos, usa LocalStorage
+            setTimeout(() => {
+                if (!configLoaded) {
+                    console.log("⏳ ESP não respondeu, usando LocalStorage...");
+                    document.getElementById('syncStatus').textContent = '💾 Usando cache local';
+                    document.getElementById('syncStatus').style.color = 'var(--yellow)';
+                    loadFromLocalStorage();
+                }
+            }, 5000);
         });
 
         client.on("error", (err) => {
             console.log("❌ Erro MQTT:", err);
             document.getElementById('mqttDot').className = 'status-dot error';
             document.getElementById('mqttStatus').textContent = 'Erro!';
+            loadFromLocalStorage();
         });
+
+        function loadFromLocalStorage() {
+            try {
+                const saved = localStorage.getItem('wellguard_phones');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        phones = parsed;
+                        renderPhones();
+                        console.log(`📱 ${phones.length} telefones carregados do LocalStorage`);
+                        document.getElementById('syncStatus').textContent = '💾 Cache local';
+                        document.getElementById('syncStatus').style.color = 'var(--yellow)';
+                        configLoaded = true;
+                        return;
+                    }
+                }
+                // Se não tem nada, tenta forçar novamente
+                if (!configLoaded && syncAttempts < 3) {
+                    syncAttempts++;
+                    console.log(`🔄 Tentativa ${syncAttempts} de buscar configurações...`);
+                    client.publish("casa/get/config", "1");
+                    client.publish("casa/get/phones", "1");
+                }
+            } catch(e) {
+                console.log("Erro ao carregar LocalStorage:", e);
+            }
+        }
 
         client.on("message", (t, m) => {
             const topic = t.toString();
@@ -828,27 +858,27 @@
             // ===== CONFIGURAÇÕES DO ESP =====
             if (topic === "casa/config/s1") {
                 document.getElementById('s1').value = val;
-                console.log(`📊 SP Gás carregado: ${val}`);
+                localStorage.setItem('wellguard_s1', val);
                 return;
             } else if (topic === "casa/config/s2") {
                 document.getElementById('s2').value = val;
-                console.log(`📊 SP Temp carregado: ${val}`);
+                localStorage.setItem('wellguard_s2', val);
                 return;
             } else if (topic === "casa/config/s3") {
                 document.getElementById('s3').value = val;
-                console.log(`📊 SP Vazão carregado: ${val}`);
+                localStorage.setItem('wellguard_s3', val);
                 return;
             } else if (topic === "casa/config/s4") {
                 document.getElementById('s4').value = val;
-                console.log(`📊 SP Pressão carregado: ${val}`);
+                localStorage.setItem('wellguard_s4', val);
                 return;
             } else if (topic === "casa/config/s5") {
                 document.getElementById('s5').value = val;
-                console.log(`📊 SP Nível carregado: ${val}`);
+                localStorage.setItem('wellguard_s5', val);
                 return;
             } else if (topic === "casa/config/s6") {
                 document.getElementById('s6').value = val;
-                console.log(`📊 Zero Gás carregado: ${val}`);
+                localStorage.setItem('wellguard_s6', val);
                 return;
             } else if (topic === "casa/config/phones") {
                 try {
@@ -856,6 +886,7 @@
                     if (Array.isArray(data)) {
                         phones = data;
                         renderPhones();
+                        localStorage.setItem('wellguard_phones', JSON.stringify(phones));
                         console.log(`📱 ${phones.length} telefones carregados do ESP`);
                         document.getElementById('syncStatus').textContent = '✅ Sincronizado!';
                         document.getElementById('syncStatus').style.color = 'var(--green)';
@@ -874,6 +905,11 @@
                 document.getElementById('espDot').className = 'status-dot online';
                 document.getElementById('espStatusText').textContent = 'Online';
                 document.getElementById('espLed').classList.add('online');
+                if (!configLoaded) {
+                    // Se o ESP está online mas não enviou configurações, pede novamente
+                    client.publish("casa/get/config", "1");
+                    client.publish("casa/get/phones", "1");
+                }
             }
 
             // Lockdown
@@ -905,17 +941,14 @@
                     document.getElementById('gasB').classList.add('alarm');
                     document.getElementById('gasStatus').textContent = '🔴 ALARME!';
                     document.getElementById('gasStatus').className = 'sensor-status alarm';
-                    console.log(`🚨 ALARME GÁS! Real: ${real} >= SP: ${sp}`);
                 } else {
                     document.getElementById('gasA').classList.remove('alarm-on');
                     document.getElementById('gasV').classList.remove('alarm');
                     document.getElementById('gasB').classList.remove('alarm');
                 }
 
-            // ===== TEMPERATURA =====
             } else if (topic.includes("temp/ambiente")) {
                 const sp = parseFloat(document.getElementById('s2').value) || 50;
-
                 document.getElementById('tempV').innerText = num.toFixed(1);
                 document.getElementById('tempV').className = 'display';
                 document.getElementById('tempB').style.width = Math.min((num / sp) * 100, 100) + "%";
@@ -928,17 +961,14 @@
                     document.getElementById('tempB').classList.add('alarm');
                     document.getElementById('tempStatus').textContent = '🔴 ALARME!';
                     document.getElementById('tempStatus').className = 'sensor-status alarm';
-                    console.log(`🚨 ALARME TEMPERATURA! ${num}°C >= SP: ${sp}°C`);
                 } else {
                     document.getElementById('tempA').classList.remove('alarm-on');
                     document.getElementById('tempV').classList.remove('alarm');
                     document.getElementById('tempB').classList.remove('alarm');
                 }
 
-            // ===== VAZÃO =====
             } else if (topic.includes("fluxo/agua")) {
                 const sp = parseFloat(document.getElementById('s3').value) || 10;
-
                 document.getElementById('flowV').innerText = num.toFixed(1);
                 document.getElementById('flowV').className = 'display';
                 document.getElementById('flowB').style.width = Math.min((num / sp) * 100, 100) + "%";
@@ -951,17 +981,14 @@
                     document.getElementById('flowB').classList.add('alarm');
                     document.getElementById('flowStatus').textContent = '🔴 ALARME!';
                     document.getElementById('flowStatus').className = 'sensor-status alarm';
-                    console.log(`🚨 ALARME VAZÃO! ${num}L/m >= SP: ${sp}L/m`);
                 } else {
                     document.getElementById('flowA').classList.remove('alarm-on');
                     document.getElementById('flowV').classList.remove('alarm');
                     document.getElementById('flowB').classList.remove('alarm');
                 }
 
-            // ===== PRESSÃO =====
             } else if (topic.includes("pressao/agua")) {
                 const sp = parseFloat(document.getElementById('s4').value) || 4;
-
                 document.getElementById('pressV').innerText = num.toFixed(2);
                 document.getElementById('pressV').className = 'display';
                 document.getElementById('pressB').style.width = Math.min((num / sp) * 100, 100) + "%";
@@ -974,17 +1001,14 @@
                     document.getElementById('pressB').classList.add('alarm');
                     document.getElementById('pressStatus').textContent = '🔴 ALARME!';
                     document.getElementById('pressStatus').className = 'sensor-status alarm';
-                    console.log(`🚨 ALARME PRESSÃO! ${num}bar >= SP: ${sp}bar`);
                 } else {
                     document.getElementById('pressA').classList.remove('alarm-on');
                     document.getElementById('pressV').classList.remove('alarm');
                     document.getElementById('pressB').classList.remove('alarm');
                 }
 
-            // ===== NÍVEL =====
             } else if (topic.includes("nivel/caixa")) {
                 const sp = parseFloat(document.getElementById('s5').value) || 80;
-
                 document.getElementById('nivelV').innerText = num.toFixed(1);
                 document.getElementById('nivelV').className = 'display';
                 document.getElementById('nivelB').style.width = Math.min(num, 100) + "%";
@@ -997,14 +1021,12 @@
                     document.getElementById('nivelB').classList.add('alarm');
                     document.getElementById('nivelStatus').textContent = '🔴 ALARME!';
                     document.getElementById('nivelStatus').className = 'sensor-status alarm';
-                    console.log(`🚨 ALARME NÍVEL! ${num}% >= SP: ${sp}%`);
                 } else {
                     document.getElementById('nivelA').classList.remove('alarm-on');
                     document.getElementById('nivelV').classList.remove('alarm');
                     document.getElementById('nivelB').classList.remove('alarm');
                 }
 
-            // ===== PRESENÇA =====
             } else if (topic.includes("presenca/status")) {
                 const det = (val === "DETECTADO");
                 document.getElementById('presV').innerText = det ? "ALERT" : "OK";
@@ -1018,7 +1040,6 @@
                     document.getElementById('presV').classList.add('alarm');
                     document.getElementById('presStatus').textContent = '🔴 ALARME!';
                     document.getElementById('presStatus').className = 'sensor-status alarm';
-                    console.log(`🚨 ALARME PRESENÇA! Detectado!`);
                 } else {
                     document.getElementById('presA').classList.remove('alarm-on');
                     document.getElementById('presV').classList.remove('alarm');
@@ -1037,11 +1058,6 @@
                 document.getElementById('espLed').classList.remove('online');
                 console.log("⚠️ ESP offline!");
             }
-            
-            // Se passou 10 segundos e não carregou as configurações
-            if (!configLoaded && document.getElementById('mqttDot').className.includes('online')) {
-                document.getElementById('syncStatus').textContent = '⏳ Aguardando ESP...';
-            }
         }, 2000);
 
         // ==================== SIRENE ====================
@@ -1052,8 +1068,7 @@
         function checkSirenStatus() {
             const anyAlarm = document.querySelectorAll('.alarm-on').length > 0;
             if (!anyAlarm || isMuted) {
-                if (sirenInterval) { clearInterval(sirenInterval);
-                    sirenInterval = null; }
+                if (sirenInterval) { clearInterval(sirenInterval); sirenInterval = null; }
             } else { playSiren(); }
         }
 
@@ -1144,10 +1159,8 @@
                 title.textContent = '🔒 LOCKDOWN ATIVO';
                 title.classList.add('lockdown-active');
                 instruments.forEach(inst => inst.classList.add('lockdown'));
-                document.querySelectorAll('.btn-toggle').forEach(b => { b.disabled = true;
-                    b.style.opacity = '0.5'; });
-                document.querySelectorAll('.footer-btns button').forEach(b => { b.disabled = true;
-                    b.style.opacity = '0.5'; });
+                document.querySelectorAll('.btn-toggle').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+                document.querySelectorAll('.footer-btns button').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
             } else {
                 btn.classList.remove('active');
                 btn.textContent = '⚡ LOCKDOWN';
@@ -1155,10 +1168,8 @@
                 title.textContent = 'WELLGUARD PRO X';
                 title.classList.remove('lockdown-active');
                 instruments.forEach(inst => inst.classList.remove('lockdown'));
-                document.querySelectorAll('.btn-toggle').forEach(b => { b.disabled = false;
-                    b.style.opacity = '1'; });
-                document.querySelectorAll('.footer-btns button').forEach(b => { b.disabled = false;
-                    b.style.opacity = '1'; });
+                document.querySelectorAll('.btn-toggle').forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+                document.querySelectorAll('.footer-btns button').forEach(b => { b.disabled = false; b.style.opacity = '1'; });
             }
         }
 
@@ -1211,13 +1222,10 @@
             if (phones.length >= 10) { alert('Limite máximo de 10 telefones atingido!'); return; }
             phones.push(full);
             renderPhones();
+            localStorage.setItem('wellguard_phones', JSON.stringify(phones));
             client.publish('casa/set/phones', JSON.stringify(phones));
-            // Atualiza sync status
-            document.getElementById('syncStatus').textContent = '✅ Salvo no ESP!';
+            document.getElementById('syncStatus').textContent = '✅ Salvo!';
             document.getElementById('syncStatus').style.color = 'var(--green)';
-            setTimeout(() => {
-                document.getElementById('syncStatus').textContent = '✅ Sincronizado!';
-            }, 2000);
             input.value = '';
         }
 
@@ -1226,6 +1234,7 @@
             if (confirm(`Remover ${phones[index]}?`)) {
                 phones.splice(index, 1);
                 renderPhones();
+                localStorage.setItem('wellguard_phones', JSON.stringify(phones));
                 client.publish('casa/set/phones', JSON.stringify(phones));
                 document.getElementById('syncStatus').textContent = '✅ Atualizado!';
                 document.getElementById('syncStatus').style.color = 'var(--green)';
@@ -1238,6 +1247,7 @@
             if (!confirm('⚠️ Remover TODOS os telefones?')) return;
             phones = [];
             renderPhones();
+            localStorage.setItem('wellguard_phones', JSON.stringify(phones));
             client.publish('casa/set/phones', JSON.stringify(phones));
             document.getElementById('syncStatus').textContent = '✅ Atualizado!';
             document.getElementById('syncStatus').style.color = 'var(--green)';
@@ -1282,21 +1292,13 @@
 
         // ==================== DIAGNÓSTICO ====================
         function diagnosticarSetpoints() {
-            console.log("===== DIAGNÓSTICO DOS SETPOINTS =====");
-            console.log(`GÁS: SP = ${document.getElementById('s1').value || 2000}`);
-            console.log(`TEMP: SP = ${document.getElementById('s2').value || 50}`);
-            console.log(`VAZÃO: SP = ${document.getElementById('s3').value || 10}`);
-            console.log(`PRESSÃO: SP = ${document.getElementById('s4').value || 4}`);
-            console.log(`NÍVEL: SP = ${document.getElementById('s5').value || 80}`);
-            console.log(`ZERO GÁS: ${document.getElementById('s6').value || 0}`);
-            console.log("======================================");
-            console.log("Últimos valores recebidos:");
-            console.log(`GÁS: ${document.getElementById('gasV').innerText}`);
-            console.log(`TEMP: ${document.getElementById('tempV').innerText}`);
-            console.log(`VAZÃO: ${document.getElementById('flowV').innerText}`);
-            console.log(`PRESSÃO: ${document.getElementById('pressV').innerText}`);
-            console.log(`NÍVEL: ${document.getElementById('nivelV').innerText}`);
-            console.log(`PRESENÇA: ${document.getElementById('presV').innerText}`);
+            console.log("===== DIAGNÓSTICO =====");
+            console.log(`GÁS: SP = ${document.getElementById('s1').value}`);
+            console.log(`TEMP: SP = ${document.getElementById('s2').value}`);
+            console.log(`VAZÃO: SP = ${document.getElementById('s3').value}`);
+            console.log(`PRESSÃO: SP = ${document.getElementById('s4').value}`);
+            console.log(`NÍVEL: SP = ${document.getElementById('s5').value}`);
+            console.log(`ZERO GÁS: ${document.getElementById('s6').value}`);
             console.log(`📱 Telefones: ${phones.length}`);
             console.log(`🔒 Lockdown: ${isLockdownActive ? 'ATIVO' : 'INATIVO'}`);
             console.log(`📡 ESP: ${isEspOnline ? 'Online' : 'Offline'}`);
@@ -1308,34 +1310,27 @@
             document.getElementById('newPhone').addEventListener('keypress', e => { if (e.key === 'Enter') addPhone(); });
             document.getElementById('lockdownPassword').addEventListener('keypress', e => { if (e.key === 'Enter') confirmLockdown(); });
 
-            // Carrega do LocalStorage apenas como fallback (enquanto espera o ESP)
+            // Carrega do LocalStorage
             const defaults = [2000, 50, 10, 4, 80, 0];
             ['s1', 's2', 's3', 's4', 's5', 's6'].forEach((id, i) => {
-                const saved = localStorage.getItem('wellguard_' + id);
-                if (saved) {
-                    document.getElementById(id).value = saved;
-                } else {
-                    document.getElementById(id).value = defaults[i];
-                }
+                document.getElementById(id).value = localStorage.getItem('wellguard_' + id) || defaults[i];
             });
 
             try {
                 const saved = localStorage.getItem('wellguard_phones');
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
+                    if (Array.isArray(parsed)) {
                         phones = parsed;
                         renderPhones();
-                        console.log(`📱 ${phones.length} telefones carregados do LocalStorage (fallback)`);
+                        console.log(`📱 ${phones.length} telefones carregados do cache`);
                     }
                 }
             } catch (e) { phones = []; }
 
             renderPhones();
-
-            console.log("🚀 WellGuard PRO X v10.8.5 - Sincronização Total!");
-            console.log("📡 Aguardando configurações do ESP...");
-            console.log("💡 Digite 'diagnosticarSetpoints()' no console para diagnosticar");
+            console.log("🚀 WellGuard PRO X v10.8.6 - Sincronização com Fallback!");
+            console.log("💡 Digite 'diagnosticarSetpoints()' no console");
         });
 
         document.addEventListener('keydown', (e) => {
