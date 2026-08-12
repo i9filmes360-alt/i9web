@@ -333,7 +333,13 @@
             justify-content: space-between;
             align-items: center;
         }
-        .api-status .status-label { font-size: 0.65rem; color: #888; }
+        .api-status .status-label {
+            font-size: 0.65rem;
+            color: #888;
+        }
+        .api-status .status-label .brazil-flag {
+            margin-right: 4px;
+        }
         .api-status .status-indicator {
             display: flex;
             align-items: center;
@@ -349,6 +355,15 @@
         .api-status .status-text {
             font-size: 0.7rem;
             color: var(--green);
+        }
+        .api-status .status-text .pix-badge {
+            display: inline-block;
+            background: rgba(0, 255, 157, 0.15);
+            border: 1px solid var(--green);
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 0.5rem;
+            margin-left: 4px;
         }
         .phone-list {
             background: #0a0a0b;
@@ -565,6 +580,19 @@
             85% { opacity: 1; transform: translateX(-50%) translateY(0); }
             100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
         }
+        .pix-info {
+            font-size: 0.55rem;
+            color: #666;
+            text-align: center;
+            margin-top: 4px;
+            padding: 4px;
+            background: rgba(0, 255, 157, 0.05);
+            border-radius: 4px;
+            border: 1px dashed rgba(0, 255, 157, 0.15);
+        }
+        .pix-info .pix-icon {
+            color: var(--green);
+        }
         @media (max-width: 600px) {
             .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
             .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
@@ -705,19 +733,29 @@
                 </div>
             </div>
 
+            <!-- STATUS DA API SMS - ATUALIZADO PARA API BRASIL -->
             <div style="margin-bottom:10px;">
                 <label style="color:var(--green);">📡 STATUS DA API SMS</label>
                 <div class="api-status">
-                    <span class="status-label">🔐 Infobip</span>
+                    <span class="status-label">
+                        <span class="brazil-flag">🇧🇷</span> API Brasil
+                    </span>
                     <div class="status-indicator">
                         <span class="status-dot"></span>
-                        <span class="status-text">✅ Configurada no ESP</span>
+                        <span class="status-text">
+                            ✅ Configurada no ESP
+                            <span class="pix-badge">💳 PIX</span>
+                        </span>
                     </div>
                 </div>
-                <div style="font-size:0.6rem; color:#666; text-align:center; margin-top:-5px;">
+                <div class="pix-info">
+                    <span class="pix-icon">💳</span> Recarga via PIX • Créditos em Reais • Sem taxa de dólar
+                </div>
+                <div style="font-size:0.55rem; color:#666; text-align:center; margin-top:4px;">
                     Credenciais ficam apenas no ESP • Mais seguro
                 </div>
             </div>
+
             <div style="border-top:1px solid #222; padding-top:10px; margin-top:10px;">
                 <label style="color:var(--green);">📱 TELEFONES CADASTRADOS</label>
                 <div class="phone-counter">
@@ -1161,7 +1199,6 @@
             renderPhones();
             input.value = '';
             input.focus();
-            // Salva no ESP
             client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
             showToast('📱 Telefone adicionado e salvo no ESP');
         }
@@ -1189,7 +1226,6 @@
 
         client.on("connect", () => {
             document.getElementById('webLed').classList.add('online');
-            // Inscreve em todos os tópicos da Estação 01
             client.subscribe(TOPIC_PREFIX + "/set/#");
             client.subscribe(TOPIC_PREFIX + "/status/#");
             client.subscribe(TOPIC_PREFIX + "/config/#");
@@ -1207,13 +1243,11 @@
             const topic = t.toString();
             const val = m.toString();
 
-            // Processa configurações e status
             if (topic.startsWith(TOPIC_PREFIX + "/config/") || topic.startsWith(TOPIC_PREFIX + "/status/")) {
                 applyConfigFromESP(topic, val);
                 return;
             }
 
-            // Verifica se a estação está online
             if (topic.startsWith(TOPIC_PREFIX) && !topic.includes("/set/")) {
                 isStationOnline = true;
                 lastStationPing = Date.now();
@@ -1345,12 +1379,13 @@
             doc.text("RELATÓRIO WELLGUARD PRO X", 20, 20);
             doc.setFontSize(11);
             doc.text(`Estação: 01`, 20, 30);
-            doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 38);
-            doc.text(`SMS: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 46);
-            doc.text(`WhatsApp: ${whatsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 54);
-            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 62);
+            doc.text(`API SMS: API Brasil (PIX)`, 20, 38);
+            doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 46);
+            doc.text(`SMS: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 54);
+            doc.text(`WhatsApp: ${whatsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 62);
+            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 70);
             phones.forEach((phone, i) => {
-                doc.text(`${i + 1}. ${phone}`, 20, 72 + (i * 8));
+                doc.text(`${i + 1}. ${phone}`, 20, 80 + (i * 8));
             });
             doc.save("Relatorio_WellGuard_Estacao01.pdf");
         }
