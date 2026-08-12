@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - v10.8.4</title>
+    <title>WellGuard PRO X - Estação 01</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -114,6 +114,11 @@
             letter-spacing: 1px;
             transition: all 0.3s ease;
         }
+        .header h1 .station-name {
+            color: var(--green);
+            font-size: 0.7rem;
+            font-weight: 300;
+        }
         .header h1.lockdown-active {
             color: var(--red);
             animation: blinkText 1s infinite;
@@ -122,13 +127,13 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.3; }
         }
-        .header h1 .esp-status {
+        .header h1 .station-status {
             font-size: 0.5rem;
             color: #666;
             font-weight: 300;
         }
-        .header h1 .esp-status.online { color: var(--green); }
-        .header h1 .esp-status.offline { color: #666; }
+        .header h1 .station-status.online { color: var(--green); }
+        .header h1 .station-status.offline { color: #666; }
         .led-group { display: flex; gap: 8px; }
         .led-item { font-size: 0.5rem; color: #666; text-align: center; }
         .led {
@@ -142,7 +147,7 @@
             background: var(--cyan);
             box-shadow: 0 0 8px var(--cyan);
         }
-        #espLed.online {
+        #stationLed.online {
             background: var(--green);
             box-shadow: 0 0 8px var(--green);
         }
@@ -227,6 +232,7 @@
             border-radius: 50%;
             background: #111;
             border: 1px solid #000;
+            transition: 0.3s;
         }
         .alarm-on {
             background: var(--red);
@@ -237,7 +243,7 @@
         .footer-btns {
             padding: 10px;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 8px;
         }
         button {
@@ -261,12 +267,22 @@
             color: #fff;
             min-width: 45px;
             border: 1px solid #333;
+            transition: 0.3s;
+            cursor: pointer;
+        }
+        .btn-toggle:hover {
+            opacity: 0.8;
         }
         .btn-active {
             background: var(--cyan);
             color: #000;
             border-color: var(--cyan);
             box-shadow: 0 0 8px rgba(0, 245, 255, 0.3);
+        }
+        .btn-inactive {
+            background: #2a2a2a;
+            color: #666;
+            border-color: #444;
         }
         .modal {
             display: none;
@@ -468,12 +484,67 @@
             margin: 8px 0;
             display: none;
         }
+        .toggle-group {
+            display: flex;
+            gap: 10px;
+            margin: 8px 0;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .toggle-btn {
+            padding: 6px 16px;
+            border-radius: 20px;
+            border: 2px solid #333;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+            background: #1a1a1a;
+            color: #666;
+        }
+        .toggle-btn.active-sms {
+            border-color: var(--cyan);
+            background: rgba(0, 245, 255, 0.15);
+            color: var(--cyan);
+        }
+        .toggle-btn.active-whats {
+            border-color: #25D366;
+            background: rgba(37, 211, 102, 0.15);
+            color: #25D366;
+        }
+        .toggle-btn.inactive {
+            border-color: #333;
+            background: #1a1a1a;
+            color: #444;
+        }
+        .toggle-btn .icon { margin-right: 4px; }
+        .status-sync {
+            font-size: 0.45rem;
+            color: #444;
+            text-align: center;
+            margin-top: 2px;
+            transition: 0.3s;
+        }
+        .status-sync.synced {
+            color: var(--green);
+        }
+        .station-badge {
+            display: inline-block;
+            background: rgba(0, 255, 157, 0.1);
+            border: 1px solid rgba(0, 255, 157, 0.2);
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 0.5rem;
+            color: var(--green);
+            margin-left: 4px;
+        }
         @media (max-width: 600px) {
             .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
             .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
             .display { font-size: 1.2rem; }
             .instrument-grid { gap: 5px; padding: 5px; }
             .instrument { padding: 6px; }
+            .footer-btns { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
@@ -483,12 +554,13 @@
         <div class="header">
             <h1 id="headerTitle">
                 WELLGUARD PRO X
-                <span class="esp-status offline" id="espStatusLabel">[⏳ aguardando ESP]</span>
+                <span class="station-name">📍 Estação 01</span>
+                <span class="station-status offline" id="stationStatusLabel">[⏳ aguardando estação]</span>
             </h1>
             <div class="header-buttons">
                 <div class="led-group">
                     <div class="led-item"><div id="webLed" class="led"></div>WEB</div>
-                    <div class="led-item"><div id="espLed" class="led"></div>ESP</div>
+                    <div class="led-item"><div id="stationLed" class="led"></div>EST</div>
                 </div>
                 <button id="fullBtn" onclick="toggleFullscreen()" class="btn-secondary" title="Tela Cheia">⛶</button>
                 <button id="muteBtn" onclick="toggleMute()" class="btn-secondary">MUTE</button>
@@ -502,6 +574,7 @@
                     <button id="gasTgl" onclick="toggleSensor('gas')" class="btn-toggle btn-active">ON</button>
                     <div id="gasA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="gasSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instTemp">
                 <div class="label">TEMP (°C) <span class="sensor-status waiting" id="tempStatus">⏳</span></div>
@@ -510,6 +583,7 @@
                     <button id="tempTgl" onclick="toggleSensor('temp')" class="btn-toggle btn-active">ON</button>
                     <div id="tempA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="tempSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instFlow">
                 <div class="label">VAZÃO (L/M) <span class="sensor-status waiting" id="flowStatus">⏳</span></div>
@@ -518,6 +592,7 @@
                     <button id="flowTgl" onclick="toggleSensor('flow')" class="btn-toggle btn-active">ON</button>
                     <div id="flowA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="flowSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instPress">
                 <div class="label">PRESS (BAR) <span class="sensor-status waiting" id="pressStatus">⏳</span></div>
@@ -526,6 +601,7 @@
                     <button id="pressTgl" onclick="toggleSensor('press')" class="btn-toggle btn-active">ON</button>
                     <div id="pressA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="pressSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instNivel">
                 <div class="label">NÍVEL (%) <span class="sensor-status waiting" id="nivelStatus">⏳</span></div>
@@ -534,6 +610,7 @@
                     <button id="nivelTgl" onclick="toggleSensor('nivel')" class="btn-toggle btn-active">ON</button>
                     <div id="nivelA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="nivelSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instPres">
                 <div class="label">PRESENÇA <span class="sensor-status waiting" id="presStatus">⏳</span></div>
@@ -542,11 +619,13 @@
                     <button id="presTgl" onclick="toggleSensor('pres')" class="btn-toggle btn-active">ON</button>
                     <div id="presA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="presSync">🔄 sincronizado</div>
             </div>
         </div>
         <div class="footer-btns">
             <button class="btn-secondary" onclick="generatePDF()">📄 PDF</button>
             <button class="btn-secondary" onclick="document.getElementById('modal').style.display='flex'">⚙️ CONFIG</button>
+            <button id="smsToggleBtn" class="btn-secondary" onclick="toggleSmsMode()">📱 SMS: ON</button>
         </div>
     </div>
 
@@ -569,7 +648,10 @@
 
     <div id="modal" class="modal">
         <div class="modal-content">
-            <h3 style="color:var(--cyan); font-size:0.8rem; margin-bottom:10px; text-align:center;">CONFIGURAÇÕES</h3>
+            <h3 style="color:var(--cyan); font-size:0.8rem; margin-bottom:10px; text-align:center;">
+                CONFIGURAÇÕES - Estação 01
+                <span style="display:block; font-size:0.55rem; color:#666; margin-top:2px;">ID: 01</span>
+            </h3>
             <label>SP GÁS</label><input type="number" id="s1">
             <label>SP TEMP</label><input type="number" id="s2">
             <label>SP VAZÃO</label><input type="number" id="s3">
@@ -577,6 +659,23 @@
             <label>SP NÍVEL</label><input type="number" id="s5">
             <label>ZERO GÁS</label><input type="number" id="s6">
             <hr style="border:0; border-top:1px solid #222; margin:10px 0;">
+            
+            <!-- SEÇÃO: CONTROLE DE SMS/WHATSAPP -->
+            <div style="margin-bottom:10px;">
+                <label style="color:var(--cyan);">📱 CONTROLE DE NOTIFICAÇÕES</label>
+                <div class="toggle-group">
+                    <button id="smsToggle" class="toggle-btn active-sms" onclick="toggleNotification('sms')">
+                        <span class="icon">📨</span> SMS
+                    </button>
+                    <button id="whatsToggle" class="toggle-btn active-whats" onclick="toggleNotification('whats')">
+                        <span class="icon">💬</span> WhatsApp
+                    </button>
+                </div>
+                <div style="font-size:0.55rem; color:#666; text-align:center; margin-top:4px;">
+                    Clique para ativar/desativar o envio de alertas
+                </div>
+            </div>
+
             <div style="margin-bottom:10px;">
                 <label style="color:var(--green);">📡 STATUS DA API SMS</label>
                 <div class="api-status">
@@ -619,25 +718,32 @@
         const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
         let phones = [];
         let isLockdownActive = false;
-        let isEspOnline = false;
+        let isStationOnline = false;
         let hasReceivedData = { gas: false, temp: false, flow: false, press: false, nivel: false, pres: false };
-        let lastEspPing = 0;
-        const ESP_TIMEOUT = 6000;
+        let lastStationPing = 0;
+        const STATION_TIMEOUT = 6000;
+        let smsEnabled = true;
+        let whatsEnabled = true;
+        let isUserInteracting = false;
+
+        // Prefixo dos tópicos para Estação 01
+        const TOPIC_PREFIX = "casa/estacao01";
+        const STATION_ID = "01";
 
         function loadConfigFromESP() {
-            client.publish("casa/get/config", "1");
-            client.publish("casa/get/phones", "1");
-            client.publish("casa/get/lockdown", "1");
+            client.publish(TOPIC_PREFIX + "/get/config", "1");
+            client.publish(TOPIC_PREFIX + "/get/phones", "1");
+            client.publish(TOPIC_PREFIX + "/get/lockdown", "1");
         }
 
         function applyConfigFromESP(topic, value) {
-            if (topic === "casa/config/s1") document.getElementById('s1').value = value;
-            else if (topic === "casa/config/s2") document.getElementById('s2').value = value;
-            else if (topic === "casa/config/s3") document.getElementById('s3').value = value;
-            else if (topic === "casa/config/s4") document.getElementById('s4').value = value;
-            else if (topic === "casa/config/s5") document.getElementById('s5').value = value;
-            else if (topic === "casa/config/s6") document.getElementById('s6').value = value;
-            else if (topic === "casa/config/phones") {
+            if (topic === TOPIC_PREFIX + "/config/s1") document.getElementById('s1').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s2") document.getElementById('s2').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s3") document.getElementById('s3').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s4") document.getElementById('s4').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s5") document.getElementById('s5').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s6") document.getElementById('s6').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/phones") {
                 try {
                     const data = JSON.parse(value);
                     if (Array.isArray(data)) {
@@ -646,19 +752,133 @@
                     }
                 } catch (e) {}
             }
+            else if (topic === TOPIC_PREFIX + "/status/sms") {
+                smsEnabled = (value === "1");
+                updateSmsButtons();
+            }
+            else if (topic === TOPIC_PREFIX + "/status/whats") {
+                whatsEnabled = (value === "1");
+                updateSmsButtons();
+            }
+            else if (topic === TOPIC_PREFIX + "/status/gas") {
+                sensorStatus.gas = (value === "1");
+                updateSensorButton('gas');
+                updateSyncStatus('gas');
+            }
+            else if (topic === TOPIC_PREFIX + "/status/temp") {
+                sensorStatus.temp = (value === "1");
+                updateSensorButton('temp');
+                updateSyncStatus('temp');
+            }
+            else if (topic === TOPIC_PREFIX + "/status/flow") {
+                sensorStatus.flow = (value === "1");
+                updateSensorButton('flow');
+                updateSyncStatus('flow');
+            }
+            else if (topic === TOPIC_PREFIX + "/status/press") {
+                sensorStatus.press = (value === "1");
+                updateSensorButton('press');
+                updateSyncStatus('press');
+            }
+            else if (topic === TOPIC_PREFIX + "/status/nivel") {
+                sensorStatus.nivel = (value === "1");
+                updateSensorButton('nivel');
+                updateSyncStatus('nivel');
+            }
+            else if (topic === TOPIC_PREFIX + "/status/pres") {
+                sensorStatus.pres = (value === "1");
+                updateSensorButton('pres');
+                updateSyncStatus('pres');
+            }
+            else if (topic === TOPIC_PREFIX + "/status/mute") {
+                isMuted = (value === "1");
+                document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
+            }
         }
 
-        function updateEspStatus() {
-            const statusLabel = document.getElementById('espStatusLabel');
-            const espLed = document.getElementById('espLed');
-            if (isEspOnline) {
-                statusLabel.className = 'esp-status online';
-                statusLabel.textContent = '[🟢 ESP online]';
-                espLed.classList.add('online');
+        function updateSensorButton(type) {
+            const btn = document.getElementById(type + 'Tgl');
+            const isActive = sensorStatus[type];
+            if (isActive) {
+                btn.innerText = "ON";
+                btn.className = 'btn-toggle btn-active';
             } else {
-                statusLabel.className = 'esp-status offline';
-                statusLabel.textContent = '[⏳ aguardando ESP]';
-                espLed.classList.remove('online');
+                btn.innerText = "OFF";
+                btn.className = 'btn-toggle btn-inactive';
+            }
+        }
+
+        function updateSyncStatus(type) {
+            const syncEl = document.getElementById(type + 'Sync');
+            if (syncEl) {
+                syncEl.textContent = '🟢 sincronizado';
+                syncEl.className = 'status-sync synced';
+            }
+        }
+
+        function updateSmsButtons() {
+            const smsBtn = document.getElementById('smsToggle');
+            const whatsBtn = document.getElementById('whatsToggle');
+            const footerBtn = document.getElementById('smsToggleBtn');
+            
+            smsBtn.className = 'toggle-btn ' + (smsEnabled ? 'active-sms' : 'inactive');
+            smsBtn.textContent = smsEnabled ? '📨 SMS' : '📨 SMS OFF';
+            
+            whatsBtn.className = 'toggle-btn ' + (whatsEnabled ? 'active-whats' : 'inactive');
+            whatsBtn.textContent = whatsEnabled ? '💬 WhatsApp' : '💬 WhatsApp OFF';
+            
+            const statusText = smsEnabled ? 'ON' : 'OFF';
+            footerBtn.textContent = `📱 SMS: ${statusText}`;
+            footerBtn.style.borderColor = smsEnabled ? 'var(--cyan)' : '#333';
+            footerBtn.style.color = smsEnabled ? 'var(--cyan)' : '#666';
+        }
+
+        function toggleNotification(type) {
+            if (isLockdownActive) {
+                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
+                return;
+            }
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
+            if (type === 'sms') {
+                smsEnabled = !smsEnabled;
+                client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
+            } else if (type === 'whats') {
+                whatsEnabled = !whatsEnabled;
+                client.publish(TOPIC_PREFIX + "/set/whats_enable", whatsEnabled ? "1" : "0");
+            }
+            updateSmsButtons();
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
+        }
+
+        function toggleSmsMode() {
+            if (isLockdownActive) {
+                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
+                return;
+            }
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
+            smsEnabled = !smsEnabled;
+            client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
+            updateSmsButtons();
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
+        }
+
+        function updateStationStatus() {
+            const statusLabel = document.getElementById('stationStatusLabel');
+            const stationLed = document.getElementById('stationLed');
+            if (isStationOnline) {
+                statusLabel.className = 'station-status online';
+                statusLabel.textContent = '[🟢 Estação 01 online]';
+                stationLed.classList.add('online');
+            } else {
+                statusLabel.className = 'station-status offline';
+                statusLabel.textContent = '[⏳ aguardando Estação 01]';
+                stationLed.classList.remove('online');
             }
         }
 
@@ -666,7 +886,7 @@
             const statusEl = document.getElementById(sensor + 'Status');
             const displayEl = document.getElementById(sensor + 'V');
             const barEl = document.getElementById(sensor + 'B');
-            if (isEspOnline && hasReceivedData[sensor]) {
+            if (isStationOnline && hasReceivedData[sensor]) {
                 statusEl.className = 'sensor-status online';
                 statusEl.textContent = '🟢';
                 displayEl.classList.remove('waiting');
@@ -696,7 +916,7 @@
                 isLockdownActive = !isLockdownActive;
                 applyLockdownState();
                 closeLockdownModal();
-                client.publish("casa/set/lockdown", isLockdownActive ? "1" : "0");
+                client.publish(TOPIC_PREFIX + "/set/lockdown", isLockdownActive ? "1" : "0");
             } else {
                 document.getElementById('lockdown_msg').style.display = 'block';
                 document.getElementById('lockdownPassword').value = '';
@@ -718,7 +938,7 @@
                 status.textContent = '🔒 sistema bloqueado';
                 overlay.classList.add('active');
                 title.classList.add('lockdown-active');
-                title.innerHTML = '🔒 LOCKDOWN ATIVO <span class="esp-status offline">[🔒]</span>';
+                title.innerHTML = '🔒 LOCKDOWN ATIVO <span class="station-name">📍 Estação 01</span>';
                 instruments.forEach(inst => inst.classList.add('lockdown'));
                 document.querySelectorAll('.btn-toggle, .footer-btns button').forEach(b => {
                     b.disabled = true;
@@ -732,14 +952,14 @@
                 status.textContent = '🔒 sistema seguro';
                 overlay.classList.remove('active');
                 title.classList.remove('lockdown-active');
-                title.innerHTML = 'WELLGUARD PRO X <span class="esp-status offline" id="espStatusLabel">[⏳ aguardando ESP]</span>';
+                title.innerHTML = 'WELLGUARD PRO X <span class="station-name">📍 Estação 01</span> <span class="station-status offline" id="stationStatusLabel">[⏳ aguardando estação]</span>';
                 instruments.forEach(inst => inst.classList.remove('lockdown'));
                 document.querySelectorAll('.btn-toggle, .footer-btns button').forEach(b => {
                     b.disabled = false;
                     b.style.opacity = '1';
                     b.style.cursor = 'pointer';
                 });
-                updateEspStatus();
+                updateStationStatus();
             }
         }
 
@@ -775,27 +995,43 @@
 
         function toggleMute() {
             if (isLockdownActive) return;
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
             isMuted = !isMuted;
             document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
-            client.publish("casa/set/mute", isMuted ? "1" : "0");
+            client.publish(TOPIC_PREFIX + "/set/mute", isMuted ? "1" : "0");
             checkSirenStatus();
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
         function toggleSensor(type) {
             if (isLockdownActive) return;
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
             sensorStatus[type] = !sensorStatus[type];
-            const btn = document.getElementById(type + 'Tgl');
+            updateSensorButton(type);
+            
             const alarmDiv = document.getElementById(type + 'A');
-            if (sensorStatus[type]) {
-                btn.innerText = "ON";
-                btn.classList.add('btn-active');
-            } else {
-                btn.innerText = "OFF";
-                btn.classList.remove('btn-active');
+            if (!sensorStatus[type]) {
                 alarmDiv.classList.remove('alarm-on');
             }
-            client.publish(`casa/set/${type}_on`, sensorStatus[type] ? "1" : "0");
+            
+            const topicMap = {
+                gas: TOPIC_PREFIX + '/set/gas_on',
+                temp: TOPIC_PREFIX + '/set/temp_on',
+                flow: TOPIC_PREFIX + '/set/flow_on',
+                press: TOPIC_PREFIX + '/set/press_on',
+                nivel: TOPIC_PREFIX + '/set/nivel_on',
+                pres: TOPIC_PREFIX + '/set/pres_on'
+            };
+            client.publish(topicMap[type], sensorStatus[type] ? "1" : "0");
+            
             checkSirenStatus();
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
         function checkSirenStatus() {
@@ -871,7 +1107,7 @@
             renderPhones();
             input.value = '';
             input.focus();
-            client.publish('casa/set/phones', JSON.stringify(phones));
+            client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
         }
 
         function removePhone(index) {
@@ -879,7 +1115,7 @@
             if (confirm(`Remover o telefone ${phones[index]}?`)) {
                 phones.splice(index, 1);
                 renderPhones();
-                client.publish('casa/set/phones', JSON.stringify(phones));
+                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
             }
         }
 
@@ -889,21 +1125,22 @@
             if (confirm('⚠️ Remover TODOS os telefones?')) {
                 phones = [];
                 renderPhones();
-                client.publish('casa/set/phones', JSON.stringify(phones));
+                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
             }
         }
 
         client.on("connect", () => {
             document.getElementById('webLed').classList.add('online');
-            client.subscribe("casa/set/#");
-            client.subscribe("casa/status/#");
-            client.subscribe("casa/config/#");
-            client.subscribe("casa/gas/#");
-            client.subscribe("casa/temp/#");
-            client.subscribe("casa/fluxo/#");
-            client.subscribe("casa/pressao/#");
-            client.subscribe("casa/nivel/#");
-            client.subscribe("casa/presenca/#");
+            // Inscreve em todos os tópicos da Estação 01
+            client.subscribe(TOPIC_PREFIX + "/set/#");
+            client.subscribe(TOPIC_PREFIX + "/status/#");
+            client.subscribe(TOPIC_PREFIX + "/config/#");
+            client.subscribe(TOPIC_PREFIX + "/gas/#");
+            client.subscribe(TOPIC_PREFIX + "/temp/#");
+            client.subscribe(TOPIC_PREFIX + "/fluxo/#");
+            client.subscribe(TOPIC_PREFIX + "/pressao/#");
+            client.subscribe(TOPIC_PREFIX + "/nivel/#");
+            client.subscribe(TOPIC_PREFIX + "/presenca/#");
             setTimeout(loadConfigFromESP, 800);
         });
 
@@ -911,18 +1148,18 @@
             const topic = t.toString();
             const val = m.toString();
 
-            if (topic.startsWith("casa/config/")) {
+            if (topic.startsWith(TOPIC_PREFIX + "/config/") || topic.startsWith(TOPIC_PREFIX + "/status/")) {
                 applyConfigFromESP(topic, val);
                 return;
             }
 
-            if (topic.startsWith("casa/") && !topic.includes("set/")) {
-                isEspOnline = true;
-                lastEspPing = Date.now();
-                updateEspStatus();
+            if (topic.startsWith(TOPIC_PREFIX) && !topic.includes("/set/")) {
+                isStationOnline = true;
+                lastStationPing = Date.now();
+                updateStationStatus();
             }
 
-            if (topic === "casa/status/lockdown") {
+            if (topic === TOPIC_PREFIX + "/status/lockdown") {
                 isLockdownActive = (val === "1");
                 applyLockdownState();
                 return;
@@ -932,7 +1169,7 @@
 
             const num = parseFloat(val);
 
-            if (topic.includes("gas/vazamento")) {
+            if (topic.includes(TOPIC_PREFIX + "/gas/vazamento")) {
                 hasReceivedData.gas = true;
                 updateSensorStatus('gas');
                 const sp = parseInt(document.getElementById('s1').value) || 2000;
@@ -940,56 +1177,56 @@
                 const real = Math.max(0, num - zero);
                 document.getElementById('gasV').innerText = real.toString().padStart(4, '0');
                 document.getElementById('gasB').style.width = Math.min((real / sp) * 100, 100) + "%";
-                document.getElementById('gasA').classList.toggle('alarm-on', real >= sp && sensorStatus.gas && isEspOnline);
+                document.getElementById('gasA').classList.toggle('alarm-on', real >= sp && sensorStatus.gas && isStationOnline);
             }
-            else if (topic.includes("temp/ambiente")) {
+            else if (topic.includes(TOPIC_PREFIX + "/temp/ambiente")) {
                 hasReceivedData.temp = true;
                 updateSensorStatus('temp');
                 const sp = parseFloat(document.getElementById('s2').value) || 50;
                 document.getElementById('tempV').innerText = num.toFixed(1);
                 document.getElementById('tempB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('tempA').classList.toggle('alarm-on', num >= sp && sensorStatus.temp && isEspOnline);
+                document.getElementById('tempA').classList.toggle('alarm-on', num >= sp && sensorStatus.temp && isStationOnline);
             }
-            else if (topic.includes("fluxo/agua")) {
+            else if (topic.includes(TOPIC_PREFIX + "/fluxo/agua")) {
                 hasReceivedData.flow = true;
                 updateSensorStatus('flow');
                 const sp = parseFloat(document.getElementById('s3').value) || 10;
                 document.getElementById('flowV').innerText = num.toFixed(1);
                 document.getElementById('flowB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('flowA').classList.toggle('alarm-on', num >= sp && sensorStatus.flow && isEspOnline);
+                document.getElementById('flowA').classList.toggle('alarm-on', num >= sp && sensorStatus.flow && isStationOnline);
             }
-            else if (topic.includes("pressao/agua")) {
+            else if (topic.includes(TOPIC_PREFIX + "/pressao/agua")) {
                 hasReceivedData.press = true;
                 updateSensorStatus('press');
                 const sp = parseFloat(document.getElementById('s4').value) || 4;
                 document.getElementById('pressV').innerText = num.toFixed(2);
                 document.getElementById('pressB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('pressA').classList.toggle('alarm-on', num >= sp && sensorStatus.press && isEspOnline);
+                document.getElementById('pressA').classList.toggle('alarm-on', num >= sp && sensorStatus.press && isStationOnline);
             }
-            else if (topic.includes("nivel/caixa")) {
+            else if (topic.includes(TOPIC_PREFIX + "/nivel/caixa")) {
                 hasReceivedData.nivel = true;
                 updateSensorStatus('nivel');
                 const sp = parseFloat(document.getElementById('s5').value) || 80;
                 document.getElementById('nivelV').innerText = num.toFixed(1);
                 document.getElementById('nivelB').style.width = Math.min(num, 100) + "%";
-                document.getElementById('nivelA').classList.toggle('alarm-on', num >= sp && sensorStatus.nivel && isEspOnline);
+                document.getElementById('nivelA').classList.toggle('alarm-on', num >= sp && sensorStatus.nivel && isStationOnline);
             }
-            else if (topic.includes("presenca/status")) {
+            else if (topic.includes(TOPIC_PREFIX + "/presenca/status")) {
                 hasReceivedData.pres = true;
                 updateSensorStatus('pres');
                 const det = (val === "DETECTADO");
                 document.getElementById('presV').innerText = det ? "ALERT" : "OK";
                 document.getElementById('presV').style.color = det ? "#ff2d55" : "#00f5ff";
-                document.getElementById('presA').classList.toggle('alarm-on', det && sensorStatus.pres && isEspOnline);
+                document.getElementById('presA').classList.toggle('alarm-on', det && sensorStatus.pres && isStationOnline);
             }
 
             checkSirenStatus();
         });
 
         setInterval(() => {
-            if (isEspOnline && (Date.now() - lastEspPing > ESP_TIMEOUT)) {
-                isEspOnline = false;
-                updateEspStatus();
+            if (isStationOnline && (Date.now() - lastStationPing > STATION_TIMEOUT)) {
+                isStationOnline = false;
+                updateStationStatus();
                 ['gas', 'temp', 'flow', 'press', 'nivel', 'pres'].forEach(s => {
                     hasReceivedData[s] = false;
                     updateSensorStatus(s);
@@ -1013,11 +1250,13 @@
                 s6: document.getElementById('s6').value
             };
             for (let id in configs) {
-                client.publish('casa/set/' + id, configs[id]);
+                client.publish(TOPIC_PREFIX + '/set/' + id, configs[id]);
             }
-            client.publish('casa/set/phones', JSON.stringify(phones));
+            client.publish(TOPIC_PREFIX + '/set/phones', JSON.stringify(phones));
+            client.publish(TOPIC_PREFIX + '/set/sms_enable', smsEnabled ? "1" : "0");
+            client.publish(TOPIC_PREFIX + '/set/whats_enable', whatsEnabled ? "1" : "0");
             document.getElementById('modal').style.display = 'none';
-            alert('✅ Configurações enviadas ao ESP com sucesso!');
+            alert('✅ Configurações enviadas para Estação 01 com sucesso!');
         }
 
         window.onload = () => {
@@ -1029,7 +1268,8 @@
             });
             renderPhones();
             applyLockdownState();
-            updateEspStatus();
+            updateStationStatus();
+            updateSmsButtons();
         };
 
         function generatePDF() {
@@ -1042,12 +1282,15 @@
             doc.setFontSize(16);
             doc.text("RELATÓRIO WELLGUARD PRO X", 20, 20);
             doc.setFontSize(11);
-            doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 30);
-            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 40);
+            doc.text(`Estação: 01`, 20, 30);
+            doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 38);
+            doc.text(`SMS: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 46);
+            doc.text(`WhatsApp: ${whatsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 54);
+            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 62);
             phones.forEach((phone, i) => {
-                doc.text(`${i + 1}. ${phone}`, 20, 50 + (i * 8));
+                doc.text(`${i + 1}. ${phone}`, 20, 72 + (i * 8));
             });
-            doc.save("Relatorio_WellGuard.pdf");
+            doc.save("Relatorio_WellGuard_Estacao01.pdf");
         }
     </script>
 </body>
