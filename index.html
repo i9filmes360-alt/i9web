@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - v10.8.6</title>
+    <title>WellGuard PRO X - Estação 01</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -114,6 +114,11 @@
             letter-spacing: 1px;
             transition: all 0.3s ease;
         }
+        .header h1 .station-name {
+            color: var(--green);
+            font-size: 0.7rem;
+            font-weight: 300;
+        }
         .header h1.lockdown-active {
             color: var(--red);
             animation: blinkText 1s infinite;
@@ -122,13 +127,13 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.3; }
         }
-        .header h1 .esp-status {
+        .header h1 .station-status {
             font-size: 0.5rem;
             color: #666;
             font-weight: 300;
         }
-        .header h1 .esp-status.online { color: var(--green); }
-        .header h1 .esp-status.offline { color: #666; }
+        .header h1 .station-status.online { color: var(--green); }
+        .header h1 .station-status.offline { color: #666; }
         .led-group { display: flex; gap: 8px; }
         .led-item { font-size: 0.5rem; color: #666; text-align: center; }
         .led {
@@ -142,7 +147,7 @@
             background: var(--cyan);
             box-shadow: 0 0 8px var(--cyan);
         }
-        #espLed.online {
+        #stationLed.online {
             background: var(--green);
             box-shadow: 0 0 8px var(--green);
         }
@@ -523,6 +528,16 @@
         .status-sync.synced {
             color: var(--green);
         }
+        .station-badge {
+            display: inline-block;
+            background: rgba(0, 255, 157, 0.1);
+            border: 1px solid rgba(0, 255, 157, 0.2);
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 0.5rem;
+            color: var(--green);
+            margin-left: 4px;
+        }
         @media (max-width: 600px) {
             .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
             .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
@@ -539,12 +554,13 @@
         <div class="header">
             <h1 id="headerTitle">
                 WELLGUARD PRO X
-                <span class="esp-status offline" id="espStatusLabel">[⏳ aguardando ESP]</span>
+                <span class="station-name">📍 Estação 01</span>
+                <span class="station-status offline" id="stationStatusLabel">[⏳ aguardando estação]</span>
             </h1>
             <div class="header-buttons">
                 <div class="led-group">
                     <div class="led-item"><div id="webLed" class="led"></div>WEB</div>
-                    <div class="led-item"><div id="espLed" class="led"></div>ESP</div>
+                    <div class="led-item"><div id="stationLed" class="led"></div>EST</div>
                 </div>
                 <button id="fullBtn" onclick="toggleFullscreen()" class="btn-secondary" title="Tela Cheia">⛶</button>
                 <button id="muteBtn" onclick="toggleMute()" class="btn-secondary">MUTE</button>
@@ -632,7 +648,10 @@
 
     <div id="modal" class="modal">
         <div class="modal-content">
-            <h3 style="color:var(--cyan); font-size:0.8rem; margin-bottom:10px; text-align:center;">CONFIGURAÇÕES</h3>
+            <h3 style="color:var(--cyan); font-size:0.8rem; margin-bottom:10px; text-align:center;">
+                CONFIGURAÇÕES - Estação 01
+                <span style="display:block; font-size:0.55rem; color:#666; margin-top:2px;">ID: 01</span>
+            </h3>
             <label>SP GÁS</label><input type="number" id="s1">
             <label>SP TEMP</label><input type="number" id="s2">
             <label>SP VAZÃO</label><input type="number" id="s3">
@@ -699,30 +718,32 @@
         const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
         let phones = [];
         let isLockdownActive = false;
-        let isEspOnline = false;
+        let isStationOnline = false;
         let hasReceivedData = { gas: false, temp: false, flow: false, press: false, nivel: false, pres: false };
-        let lastEspPing = 0;
-        const ESP_TIMEOUT = 6000;
+        let lastStationPing = 0;
+        const STATION_TIMEOUT = 6000;
         let smsEnabled = true;
         let whatsEnabled = true;
-
-        // Controla se o usuário está interagindo para evitar loop
         let isUserInteracting = false;
 
+        // Prefixo dos tópicos para Estação 01
+        const TOPIC_PREFIX = "casa/estacao01";
+        const STATION_ID = "01";
+
         function loadConfigFromESP() {
-            client.publish("casa/get/config", "1");
-            client.publish("casa/get/phones", "1");
-            client.publish("casa/get/lockdown", "1");
+            client.publish(TOPIC_PREFIX + "/get/config", "1");
+            client.publish(TOPIC_PREFIX + "/get/phones", "1");
+            client.publish(TOPIC_PREFIX + "/get/lockdown", "1");
         }
 
         function applyConfigFromESP(topic, value) {
-            if (topic === "casa/config/s1") document.getElementById('s1').value = value;
-            else if (topic === "casa/config/s2") document.getElementById('s2').value = value;
-            else if (topic === "casa/config/s3") document.getElementById('s3').value = value;
-            else if (topic === "casa/config/s4") document.getElementById('s4').value = value;
-            else if (topic === "casa/config/s5") document.getElementById('s5').value = value;
-            else if (topic === "casa/config/s6") document.getElementById('s6').value = value;
-            else if (topic === "casa/config/phones") {
+            if (topic === TOPIC_PREFIX + "/config/s1") document.getElementById('s1').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s2") document.getElementById('s2').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s3") document.getElementById('s3').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s4") document.getElementById('s4').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s5") document.getElementById('s5').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/s6") document.getElementById('s6').value = value;
+            else if (topic === TOPIC_PREFIX + "/config/phones") {
                 try {
                     const data = JSON.parse(value);
                     if (Array.isArray(data)) {
@@ -731,46 +752,45 @@
                     }
                 } catch (e) {}
             }
-            else if (topic === "casa/status/sms") {
+            else if (topic === TOPIC_PREFIX + "/status/sms") {
                 smsEnabled = (value === "1");
                 updateSmsButtons();
             }
-            else if (topic === "casa/status/whats") {
+            else if (topic === TOPIC_PREFIX + "/status/whats") {
                 whatsEnabled = (value === "1");
                 updateSmsButtons();
             }
-            // NOVOS STATUS DOS SENSORES
-            else if (topic === "casa/status/gas") {
+            else if (topic === TOPIC_PREFIX + "/status/gas") {
                 sensorStatus.gas = (value === "1");
                 updateSensorButton('gas');
                 updateSyncStatus('gas');
             }
-            else if (topic === "casa/status/temp") {
+            else if (topic === TOPIC_PREFIX + "/status/temp") {
                 sensorStatus.temp = (value === "1");
                 updateSensorButton('temp');
                 updateSyncStatus('temp');
             }
-            else if (topic === "casa/status/flow") {
+            else if (topic === TOPIC_PREFIX + "/status/flow") {
                 sensorStatus.flow = (value === "1");
                 updateSensorButton('flow');
                 updateSyncStatus('flow');
             }
-            else if (topic === "casa/status/press") {
+            else if (topic === TOPIC_PREFIX + "/status/press") {
                 sensorStatus.press = (value === "1");
                 updateSensorButton('press');
                 updateSyncStatus('press');
             }
-            else if (topic === "casa/status/nivel") {
+            else if (topic === TOPIC_PREFIX + "/status/nivel") {
                 sensorStatus.nivel = (value === "1");
                 updateSensorButton('nivel');
                 updateSyncStatus('nivel');
             }
-            else if (topic === "casa/status/pres") {
+            else if (topic === TOPIC_PREFIX + "/status/pres") {
                 sensorStatus.pres = (value === "1");
                 updateSensorButton('pres');
                 updateSyncStatus('pres');
             }
-            else if (topic === "casa/status/mute") {
+            else if (topic === TOPIC_PREFIX + "/status/mute") {
                 isMuted = (value === "1");
                 document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
             }
@@ -823,10 +843,10 @@
             
             if (type === 'sms') {
                 smsEnabled = !smsEnabled;
-                client.publish("casa/set/sms_enable", smsEnabled ? "1" : "0");
+                client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
             } else if (type === 'whats') {
                 whatsEnabled = !whatsEnabled;
-                client.publish("casa/set/whats_enable", whatsEnabled ? "1" : "0");
+                client.publish(TOPIC_PREFIX + "/set/whats_enable", whatsEnabled ? "1" : "0");
             }
             updateSmsButtons();
             
@@ -842,23 +862,23 @@
             isUserInteracting = true;
             
             smsEnabled = !smsEnabled;
-            client.publish("casa/set/sms_enable", smsEnabled ? "1" : "0");
+            client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
             updateSmsButtons();
             
             setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
-        function updateEspStatus() {
-            const statusLabel = document.getElementById('espStatusLabel');
-            const espLed = document.getElementById('espLed');
-            if (isEspOnline) {
-                statusLabel.className = 'esp-status online';
-                statusLabel.textContent = '[🟢 ESP online]';
-                espLed.classList.add('online');
+        function updateStationStatus() {
+            const statusLabel = document.getElementById('stationStatusLabel');
+            const stationLed = document.getElementById('stationLed');
+            if (isStationOnline) {
+                statusLabel.className = 'station-status online';
+                statusLabel.textContent = '[🟢 Estação 01 online]';
+                stationLed.classList.add('online');
             } else {
-                statusLabel.className = 'esp-status offline';
-                statusLabel.textContent = '[⏳ aguardando ESP]';
-                espLed.classList.remove('online');
+                statusLabel.className = 'station-status offline';
+                statusLabel.textContent = '[⏳ aguardando Estação 01]';
+                stationLed.classList.remove('online');
             }
         }
 
@@ -866,7 +886,7 @@
             const statusEl = document.getElementById(sensor + 'Status');
             const displayEl = document.getElementById(sensor + 'V');
             const barEl = document.getElementById(sensor + 'B');
-            if (isEspOnline && hasReceivedData[sensor]) {
+            if (isStationOnline && hasReceivedData[sensor]) {
                 statusEl.className = 'sensor-status online';
                 statusEl.textContent = '🟢';
                 displayEl.classList.remove('waiting');
@@ -896,7 +916,7 @@
                 isLockdownActive = !isLockdownActive;
                 applyLockdownState();
                 closeLockdownModal();
-                client.publish("casa/set/lockdown", isLockdownActive ? "1" : "0");
+                client.publish(TOPIC_PREFIX + "/set/lockdown", isLockdownActive ? "1" : "0");
             } else {
                 document.getElementById('lockdown_msg').style.display = 'block';
                 document.getElementById('lockdownPassword').value = '';
@@ -918,7 +938,7 @@
                 status.textContent = '🔒 sistema bloqueado';
                 overlay.classList.add('active');
                 title.classList.add('lockdown-active');
-                title.innerHTML = '🔒 LOCKDOWN ATIVO <span class="esp-status offline">[🔒]</span>';
+                title.innerHTML = '🔒 LOCKDOWN ATIVO <span class="station-name">📍 Estação 01</span>';
                 instruments.forEach(inst => inst.classList.add('lockdown'));
                 document.querySelectorAll('.btn-toggle, .footer-btns button').forEach(b => {
                     b.disabled = true;
@@ -932,14 +952,14 @@
                 status.textContent = '🔒 sistema seguro';
                 overlay.classList.remove('active');
                 title.classList.remove('lockdown-active');
-                title.innerHTML = 'WELLGUARD PRO X <span class="esp-status offline" id="espStatusLabel">[⏳ aguardando ESP]</span>';
+                title.innerHTML = 'WELLGUARD PRO X <span class="station-name">📍 Estação 01</span> <span class="station-status offline" id="stationStatusLabel">[⏳ aguardando estação]</span>';
                 instruments.forEach(inst => inst.classList.remove('lockdown'));
                 document.querySelectorAll('.btn-toggle, .footer-btns button').forEach(b => {
                     b.disabled = false;
                     b.style.opacity = '1';
                     b.style.cursor = 'pointer';
                 });
-                updateEspStatus();
+                updateStationStatus();
             }
         }
 
@@ -980,7 +1000,7 @@
             
             isMuted = !isMuted;
             document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
-            client.publish("casa/set/mute", isMuted ? "1" : "0");
+            client.publish(TOPIC_PREFIX + "/set/mute", isMuted ? "1" : "0");
             checkSirenStatus();
             
             setTimeout(() => { isUserInteracting = false; }, 200);
@@ -999,14 +1019,13 @@
                 alarmDiv.classList.remove('alarm-on');
             }
             
-            // Publica comando para o ESP
             const topicMap = {
-                gas: 'casa/set/gas_on',
-                temp: 'casa/set/temp_on',
-                flow: 'casa/set/flow_on',
-                press: 'casa/set/press_on',
-                nivel: 'casa/set/nivel_on',
-                pres: 'casa/set/pres_on'
+                gas: TOPIC_PREFIX + '/set/gas_on',
+                temp: TOPIC_PREFIX + '/set/temp_on',
+                flow: TOPIC_PREFIX + '/set/flow_on',
+                press: TOPIC_PREFIX + '/set/press_on',
+                nivel: TOPIC_PREFIX + '/set/nivel_on',
+                pres: TOPIC_PREFIX + '/set/pres_on'
             };
             client.publish(topicMap[type], sensorStatus[type] ? "1" : "0");
             
@@ -1088,7 +1107,7 @@
             renderPhones();
             input.value = '';
             input.focus();
-            client.publish('casa/set/phones', JSON.stringify(phones));
+            client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
         }
 
         function removePhone(index) {
@@ -1096,7 +1115,7 @@
             if (confirm(`Remover o telefone ${phones[index]}?`)) {
                 phones.splice(index, 1);
                 renderPhones();
-                client.publish('casa/set/phones', JSON.stringify(phones));
+                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
             }
         }
 
@@ -1106,22 +1125,22 @@
             if (confirm('⚠️ Remover TODOS os telefones?')) {
                 phones = [];
                 renderPhones();
-                client.publish('casa/set/phones', JSON.stringify(phones));
+                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
             }
         }
 
         client.on("connect", () => {
             document.getElementById('webLed').classList.add('online');
-            // Inscreve em todos os tópicos necessários
-            client.subscribe("casa/set/#");
-            client.subscribe("casa/status/#");
-            client.subscribe("casa/config/#");
-            client.subscribe("casa/gas/#");
-            client.subscribe("casa/temp/#");
-            client.subscribe("casa/fluxo/#");
-            client.subscribe("casa/pressao/#");
-            client.subscribe("casa/nivel/#");
-            client.subscribe("casa/presenca/#");
+            // Inscreve em todos os tópicos da Estação 01
+            client.subscribe(TOPIC_PREFIX + "/set/#");
+            client.subscribe(TOPIC_PREFIX + "/status/#");
+            client.subscribe(TOPIC_PREFIX + "/config/#");
+            client.subscribe(TOPIC_PREFIX + "/gas/#");
+            client.subscribe(TOPIC_PREFIX + "/temp/#");
+            client.subscribe(TOPIC_PREFIX + "/fluxo/#");
+            client.subscribe(TOPIC_PREFIX + "/pressao/#");
+            client.subscribe(TOPIC_PREFIX + "/nivel/#");
+            client.subscribe(TOPIC_PREFIX + "/presenca/#");
             setTimeout(loadConfigFromESP, 800);
         });
 
@@ -1129,18 +1148,18 @@
             const topic = t.toString();
             const val = m.toString();
 
-            if (topic.startsWith("casa/config/") || topic.startsWith("casa/status/")) {
+            if (topic.startsWith(TOPIC_PREFIX + "/config/") || topic.startsWith(TOPIC_PREFIX + "/status/")) {
                 applyConfigFromESP(topic, val);
                 return;
             }
 
-            if (topic.startsWith("casa/") && !topic.includes("set/")) {
-                isEspOnline = true;
-                lastEspPing = Date.now();
-                updateEspStatus();
+            if (topic.startsWith(TOPIC_PREFIX) && !topic.includes("/set/")) {
+                isStationOnline = true;
+                lastStationPing = Date.now();
+                updateStationStatus();
             }
 
-            if (topic === "casa/status/lockdown") {
+            if (topic === TOPIC_PREFIX + "/status/lockdown") {
                 isLockdownActive = (val === "1");
                 applyLockdownState();
                 return;
@@ -1150,7 +1169,7 @@
 
             const num = parseFloat(val);
 
-            if (topic.includes("gas/vazamento")) {
+            if (topic.includes(TOPIC_PREFIX + "/gas/vazamento")) {
                 hasReceivedData.gas = true;
                 updateSensorStatus('gas');
                 const sp = parseInt(document.getElementById('s1').value) || 2000;
@@ -1158,56 +1177,56 @@
                 const real = Math.max(0, num - zero);
                 document.getElementById('gasV').innerText = real.toString().padStart(4, '0');
                 document.getElementById('gasB').style.width = Math.min((real / sp) * 100, 100) + "%";
-                document.getElementById('gasA').classList.toggle('alarm-on', real >= sp && sensorStatus.gas && isEspOnline);
+                document.getElementById('gasA').classList.toggle('alarm-on', real >= sp && sensorStatus.gas && isStationOnline);
             }
-            else if (topic.includes("temp/ambiente")) {
+            else if (topic.includes(TOPIC_PREFIX + "/temp/ambiente")) {
                 hasReceivedData.temp = true;
                 updateSensorStatus('temp');
                 const sp = parseFloat(document.getElementById('s2').value) || 50;
                 document.getElementById('tempV').innerText = num.toFixed(1);
                 document.getElementById('tempB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('tempA').classList.toggle('alarm-on', num >= sp && sensorStatus.temp && isEspOnline);
+                document.getElementById('tempA').classList.toggle('alarm-on', num >= sp && sensorStatus.temp && isStationOnline);
             }
-            else if (topic.includes("fluxo/agua")) {
+            else if (topic.includes(TOPIC_PREFIX + "/fluxo/agua")) {
                 hasReceivedData.flow = true;
                 updateSensorStatus('flow');
                 const sp = parseFloat(document.getElementById('s3').value) || 10;
                 document.getElementById('flowV').innerText = num.toFixed(1);
                 document.getElementById('flowB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('flowA').classList.toggle('alarm-on', num >= sp && sensorStatus.flow && isEspOnline);
+                document.getElementById('flowA').classList.toggle('alarm-on', num >= sp && sensorStatus.flow && isStationOnline);
             }
-            else if (topic.includes("pressao/agua")) {
+            else if (topic.includes(TOPIC_PREFIX + "/pressao/agua")) {
                 hasReceivedData.press = true;
                 updateSensorStatus('press');
                 const sp = parseFloat(document.getElementById('s4').value) || 4;
                 document.getElementById('pressV').innerText = num.toFixed(2);
                 document.getElementById('pressB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('pressA').classList.toggle('alarm-on', num >= sp && sensorStatus.press && isEspOnline);
+                document.getElementById('pressA').classList.toggle('alarm-on', num >= sp && sensorStatus.press && isStationOnline);
             }
-            else if (topic.includes("nivel/caixa")) {
+            else if (topic.includes(TOPIC_PREFIX + "/nivel/caixa")) {
                 hasReceivedData.nivel = true;
                 updateSensorStatus('nivel');
                 const sp = parseFloat(document.getElementById('s5').value) || 80;
                 document.getElementById('nivelV').innerText = num.toFixed(1);
                 document.getElementById('nivelB').style.width = Math.min(num, 100) + "%";
-                document.getElementById('nivelA').classList.toggle('alarm-on', num >= sp && sensorStatus.nivel && isEspOnline);
+                document.getElementById('nivelA').classList.toggle('alarm-on', num >= sp && sensorStatus.nivel && isStationOnline);
             }
-            else if (topic.includes("presenca/status")) {
+            else if (topic.includes(TOPIC_PREFIX + "/presenca/status")) {
                 hasReceivedData.pres = true;
                 updateSensorStatus('pres');
                 const det = (val === "DETECTADO");
                 document.getElementById('presV').innerText = det ? "ALERT" : "OK";
                 document.getElementById('presV').style.color = det ? "#ff2d55" : "#00f5ff";
-                document.getElementById('presA').classList.toggle('alarm-on', det && sensorStatus.pres && isEspOnline);
+                document.getElementById('presA').classList.toggle('alarm-on', det && sensorStatus.pres && isStationOnline);
             }
 
             checkSirenStatus();
         });
 
         setInterval(() => {
-            if (isEspOnline && (Date.now() - lastEspPing > ESP_TIMEOUT)) {
-                isEspOnline = false;
-                updateEspStatus();
+            if (isStationOnline && (Date.now() - lastStationPing > STATION_TIMEOUT)) {
+                isStationOnline = false;
+                updateStationStatus();
                 ['gas', 'temp', 'flow', 'press', 'nivel', 'pres'].forEach(s => {
                     hasReceivedData[s] = false;
                     updateSensorStatus(s);
@@ -1231,13 +1250,13 @@
                 s6: document.getElementById('s6').value
             };
             for (let id in configs) {
-                client.publish('casa/set/' + id, configs[id]);
+                client.publish(TOPIC_PREFIX + '/set/' + id, configs[id]);
             }
-            client.publish('casa/set/phones', JSON.stringify(phones));
-            client.publish('casa/set/sms_enable', smsEnabled ? "1" : "0");
-            client.publish('casa/set/whats_enable', whatsEnabled ? "1" : "0");
+            client.publish(TOPIC_PREFIX + '/set/phones', JSON.stringify(phones));
+            client.publish(TOPIC_PREFIX + '/set/sms_enable', smsEnabled ? "1" : "0");
+            client.publish(TOPIC_PREFIX + '/set/whats_enable', whatsEnabled ? "1" : "0");
             document.getElementById('modal').style.display = 'none';
-            alert('✅ Configurações enviadas ao ESP com sucesso!');
+            alert('✅ Configurações enviadas para Estação 01 com sucesso!');
         }
 
         window.onload = () => {
@@ -1249,7 +1268,7 @@
             });
             renderPhones();
             applyLockdownState();
-            updateEspStatus();
+            updateStationStatus();
             updateSmsButtons();
         };
 
@@ -1263,14 +1282,15 @@
             doc.setFontSize(16);
             doc.text("RELATÓRIO WELLGUARD PRO X", 20, 20);
             doc.setFontSize(11);
-            doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 30);
-            doc.text(`SMS: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 40);
-            doc.text(`WhatsApp: ${whatsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 48);
-            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 56);
+            doc.text(`Estação: 01`, 20, 30);
+            doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 38);
+            doc.text(`SMS: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 46);
+            doc.text(`WhatsApp: ${whatsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 54);
+            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 62);
             phones.forEach((phone, i) => {
-                doc.text(`${i + 1}. ${phone}`, 20, 66 + (i * 8));
+                doc.text(`${i + 1}. ${phone}`, 20, 72 + (i * 8));
             });
-            doc.save("Relatorio_WellGuard.pdf");
+            doc.save("Relatorio_WellGuard_Estacao01.pdf");
         }
     </script>
 </body>
