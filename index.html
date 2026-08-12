@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - v10.8.4</title>
+    <title>WellGuard PRO X - v10.8.5</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -237,7 +237,7 @@
         .footer-btns {
             padding: 10px;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 8px;
         }
         button {
@@ -468,12 +468,47 @@
             margin: 8px 0;
             display: none;
         }
+        .toggle-group {
+            display: flex;
+            gap: 10px;
+            margin: 8px 0;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .toggle-btn {
+            padding: 6px 16px;
+            border-radius: 20px;
+            border: 2px solid #333;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+            background: #1a1a1a;
+            color: #666;
+        }
+        .toggle-btn.active-sms {
+            border-color: var(--cyan);
+            background: rgba(0, 245, 255, 0.15);
+            color: var(--cyan);
+        }
+        .toggle-btn.active-whats {
+            border-color: #25D366;
+            background: rgba(37, 211, 102, 0.15);
+            color: #25D366;
+        }
+        .toggle-btn.inactive {
+            border-color: #333;
+            background: #1a1a1a;
+            color: #444;
+        }
+        .toggle-btn .icon { margin-right: 4px; }
         @media (max-width: 600px) {
             .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
             .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
             .display { font-size: 1.2rem; }
             .instrument-grid { gap: 5px; padding: 5px; }
             .instrument { padding: 6px; }
+            .footer-btns { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
@@ -547,6 +582,7 @@
         <div class="footer-btns">
             <button class="btn-secondary" onclick="generatePDF()">📄 PDF</button>
             <button class="btn-secondary" onclick="document.getElementById('modal').style.display='flex'">⚙️ CONFIG</button>
+            <button id="smsToggleBtn" class="btn-secondary" onclick="toggleSmsMode()">📱 SMS: ON</button>
         </div>
     </div>
 
@@ -577,6 +613,23 @@
             <label>SP NÍVEL</label><input type="number" id="s5">
             <label>ZERO GÁS</label><input type="number" id="s6">
             <hr style="border:0; border-top:1px solid #222; margin:10px 0;">
+            
+            <!-- NOVA SEÇÃO: CONTROLE DE SMS/WHATSAPP -->
+            <div style="margin-bottom:10px;">
+                <label style="color:var(--cyan);">📱 CONTROLE DE NOTIFICAÇÕES</label>
+                <div class="toggle-group">
+                    <button id="smsToggle" class="toggle-btn active-sms" onclick="toggleNotification('sms')">
+                        <span class="icon">📨</span> SMS
+                    </button>
+                    <button id="whatsToggle" class="toggle-btn active-whats" onclick="toggleNotification('whats')">
+                        <span class="icon">💬</span> WhatsApp
+                    </button>
+                </div>
+                <div style="font-size:0.55rem; color:#666; text-align:center; margin-top:4px;">
+                    Clique para ativar/desativar o envio de alertas
+                </div>
+            </div>
+
             <div style="margin-bottom:10px;">
                 <label style="color:var(--green);">📡 STATUS DA API SMS</label>
                 <div class="api-status">
@@ -624,6 +677,10 @@
         let lastEspPing = 0;
         const ESP_TIMEOUT = 6000;
 
+        // NOVAS VARIÁVEIS PARA CONTROLE SMS/WHATSAPP
+        let smsEnabled = true;
+        let whatsEnabled = true;
+
         function loadConfigFromESP() {
             client.publish("casa/get/config", "1");
             client.publish("casa/get/phones", "1");
@@ -646,6 +703,59 @@
                     }
                 } catch (e) {}
             }
+            // NOVOS STATUS
+            else if (topic === "casa/status/sms") {
+                smsEnabled = (value === "1");
+                updateSmsButtons();
+            }
+            else if (topic === "casa/status/whats") {
+                whatsEnabled = (value === "1");
+                updateSmsButtons();
+            }
+        }
+
+        function updateSmsButtons() {
+            const smsBtn = document.getElementById('smsToggle');
+            const whatsBtn = document.getElementById('whatsToggle');
+            const footerBtn = document.getElementById('smsToggleBtn');
+            
+            // Atualiza botões no modal
+            smsBtn.className = 'toggle-btn ' + (smsEnabled ? 'active-sms' : 'inactive');
+            smsBtn.textContent = smsEnabled ? '📨 SMS' : '📨 SMS OFF';
+            
+            whatsBtn.className = 'toggle-btn ' + (whatsEnabled ? 'active-whats' : 'inactive');
+            whatsBtn.textContent = whatsEnabled ? '💬 WhatsApp' : '💬 WhatsApp OFF';
+            
+            // Atualiza botão no rodapé
+            const statusText = smsEnabled ? 'ON' : 'OFF';
+            footerBtn.textContent = `📱 SMS: ${statusText}`;
+            footerBtn.style.borderColor = smsEnabled ? 'var(--cyan)' : '#333';
+            footerBtn.style.color = smsEnabled ? 'var(--cyan)' : '#666';
+        }
+
+        function toggleNotification(type) {
+            if (isLockdownActive) {
+                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
+                return;
+            }
+            if (type === 'sms') {
+                smsEnabled = !smsEnabled;
+                client.publish("casa/set/sms_enable", smsEnabled ? "1" : "0");
+            } else if (type === 'whats') {
+                whatsEnabled = !whatsEnabled;
+                client.publish("casa/set/whats_enable", whatsEnabled ? "1" : "0");
+            }
+            updateSmsButtons();
+        }
+
+        function toggleSmsMode() {
+            if (isLockdownActive) {
+                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
+                return;
+            }
+            smsEnabled = !smsEnabled;
+            client.publish("casa/set/sms_enable", smsEnabled ? "1" : "0");
+            updateSmsButtons();
         }
 
         function updateEspStatus() {
@@ -911,7 +1021,7 @@
             const topic = t.toString();
             const val = m.toString();
 
-            if (topic.startsWith("casa/config/")) {
+            if (topic.startsWith("casa/config/") || topic.startsWith("casa/status/")) {
                 applyConfigFromESP(topic, val);
                 return;
             }
@@ -1016,6 +1126,8 @@
                 client.publish('casa/set/' + id, configs[id]);
             }
             client.publish('casa/set/phones', JSON.stringify(phones));
+            client.publish('casa/set/sms_enable', smsEnabled ? "1" : "0");
+            client.publish('casa/set/whats_enable', whatsEnabled ? "1" : "0");
             document.getElementById('modal').style.display = 'none';
             alert('✅ Configurações enviadas ao ESP com sucesso!');
         }
@@ -1030,6 +1142,7 @@
             renderPhones();
             applyLockdownState();
             updateEspStatus();
+            updateSmsButtons();
         };
 
         function generatePDF() {
@@ -1043,9 +1156,11 @@
             doc.text("RELATÓRIO WELLGUARD PRO X", 20, 20);
             doc.setFontSize(11);
             doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 30);
-            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 40);
+            doc.text(`SMS: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 40);
+            doc.text(`WhatsApp: ${whatsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 48);
+            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 56);
             phones.forEach((phone, i) => {
-                doc.text(`${i + 1}. ${phone}`, 20, 50 + (i * 8));
+                doc.text(`${i + 1}. ${phone}`, 20, 66 + (i * 8));
             });
             doc.save("Relatorio_WellGuard.pdf");
         }
