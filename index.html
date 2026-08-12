@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - v10.8.3</title>
+    <title>WellGuard PRO X - v10.8.4</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -126,7 +126,6 @@
             font-size: 0.5rem;
             color: #666;
             font-weight: 300;
-            letter-spacing: 0px;
         }
         .header h1 .esp-status.online { color: var(--green); }
         .header h1 .esp-status.offline { color: #666; }
@@ -213,7 +212,6 @@
             width: 0%;
             transition: 0.6s cubic-bezier(0.4, 0, 0.2, 1);
             background: linear-gradient(90deg, var(--green) 0%, var(--yellow) 50%, var(--red) 100%);
-            background-size: 100% 100%;
             box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
         }
         .bar-fill.waiting { opacity: 0.1; }
@@ -366,7 +364,6 @@
             font-size: 0.6rem;
             cursor: pointer;
         }
-        .phone-item .remove-phone:hover { opacity: 0.8; }
         .phone-counter {
             font-size: 0.7rem;
             color: #888;
@@ -428,7 +425,6 @@
             background: transparent;
             flex: 1;
         }
-        .phone-input-wrapper input:focus { outline: none; }
         .lockdown-modal .modal-content {
             border: 2px solid rgba(255, 0, 0, 0.3);
             text-align: center;
@@ -453,11 +449,6 @@
             border-radius: 8px;
             border: none;
             cursor: pointer;
-            transition: 0.3s;
-        }
-        .btn-lockdown-confirm:hover {
-            transform: scale(1.02);
-            box-shadow: 0 0 30px rgba(255, 0, 0, 0.2);
         }
         .btn-lockdown-cancel {
             background: #333;
@@ -478,17 +469,8 @@
             display: none;
         }
         @media (max-width: 600px) {
-            .lockdown-watermark {
-                font-size: 0.45rem;
-                bottom: 10px;
-                left: 10px;
-                padding: 5px 8px;
-            }
-            .lockdown-status {
-                font-size: 0.4rem;
-                bottom: 40px;
-                left: 10px;
-            }
+            .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
+            .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
             .display { font-size: 1.2rem; }
             .instrument-grid { gap: 5px; padding: 5px; }
             .instrument { padding: 6px; }
@@ -598,10 +580,10 @@
             <div style="margin-bottom:10px;">
                 <label style="color:var(--green);">📡 STATUS DA API SMS</label>
                 <div class="api-status">
-                    <span class="status-label">🔐 API APIBrasil</span>
+                    <span class="status-label">🔐 Infobip</span>
                     <div class="status-indicator">
-                        <span class="status-dot" id="apiStatusDot"></span>
-                        <span class="status-text" id="apiStatusText">✅ Configurada no ESP</span>
+                        <span class="status-dot"></span>
+                        <span class="status-text">✅ Configurada no ESP</span>
                     </div>
                 </div>
                 <div style="font-size:0.6rem; color:#666; text-align:center; margin-top:-5px;">
@@ -614,13 +596,12 @@
                     <span id="phoneCount">0</span> / 10 números
                 </div>
                 <div id="limitWarning" class="limit-warning">
-                    ⚠️ LIMITE MÁXIMO DE 10 TELEFONES ATINGIDO!<br>
-                    <small>Procure o Programador para aumentar o limite.</small>
+                    ⚠️ LIMITE MÁXIMO DE 10 TELEFONES ATINGIDO!
                 </div>
                 <div id="phoneList" class="phone-list"></div>
                 <div class="phone-input-wrapper">
                     <span class="prefix">+55</span>
-                    <input type="text" id="newPhone" placeholder="DDD + Número (ex: 11999999999)">
+                    <input type="text" id="newPhone" placeholder="DDD + Número (ex: 79981182425)">
                 </div>
                 <div style="display:flex; gap:5px;">
                     <button onclick="addPhone()" id="addPhoneBtn" class="btn-add-phone" style="flex:1;">➕ ADICIONAR</button>
@@ -663,9 +644,7 @@
                         phones = data;
                         renderPhones();
                     }
-                } catch (e) {
-                    console.log("Erro ao processar telefones:", e);
-                }
+                } catch (e) {}
             }
         }
 
@@ -712,7 +691,7 @@
 
         function confirmLockdown() {
             const password = document.getElementById('lockdownPassword').value;
-            const correctPassword = "iptu676466"; // Altere esta senha!
+            const correctPassword = "iptu676466";
             if (password === correctPassword) {
                 isLockdownActive = !isLockdownActive;
                 applyLockdownState();
@@ -876,7 +855,7 @@
             if (phone.startsWith('+55')) phone = phone.substring(3);
             if (phone.startsWith('55')) phone = phone.substring(2);
             if (phone.length < 10) {
-                alert('Número inválido! Use: DDD + número (ex: 11999999999)');
+                alert('Número inválido! Use: DDD + número (ex: 79981182425)');
                 return;
             }
             const fullPhone = '+55' + phone;
