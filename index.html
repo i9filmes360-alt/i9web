@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - v10.8.5</title>
+    <title>WellGuard PRO X - v10.8.6</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -227,6 +227,7 @@
             border-radius: 50%;
             background: #111;
             border: 1px solid #000;
+            transition: 0.3s;
         }
         .alarm-on {
             background: var(--red);
@@ -261,12 +262,22 @@
             color: #fff;
             min-width: 45px;
             border: 1px solid #333;
+            transition: 0.3s;
+            cursor: pointer;
+        }
+        .btn-toggle:hover {
+            opacity: 0.8;
         }
         .btn-active {
             background: var(--cyan);
             color: #000;
             border-color: var(--cyan);
             box-shadow: 0 0 8px rgba(0, 245, 255, 0.3);
+        }
+        .btn-inactive {
+            background: #2a2a2a;
+            color: #666;
+            border-color: #444;
         }
         .modal {
             display: none;
@@ -502,6 +513,16 @@
             color: #444;
         }
         .toggle-btn .icon { margin-right: 4px; }
+        .status-sync {
+            font-size: 0.45rem;
+            color: #444;
+            text-align: center;
+            margin-top: 2px;
+            transition: 0.3s;
+        }
+        .status-sync.synced {
+            color: var(--green);
+        }
         @media (max-width: 600px) {
             .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
             .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
@@ -537,6 +558,7 @@
                     <button id="gasTgl" onclick="toggleSensor('gas')" class="btn-toggle btn-active">ON</button>
                     <div id="gasA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="gasSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instTemp">
                 <div class="label">TEMP (°C) <span class="sensor-status waiting" id="tempStatus">⏳</span></div>
@@ -545,6 +567,7 @@
                     <button id="tempTgl" onclick="toggleSensor('temp')" class="btn-toggle btn-active">ON</button>
                     <div id="tempA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="tempSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instFlow">
                 <div class="label">VAZÃO (L/M) <span class="sensor-status waiting" id="flowStatus">⏳</span></div>
@@ -553,6 +576,7 @@
                     <button id="flowTgl" onclick="toggleSensor('flow')" class="btn-toggle btn-active">ON</button>
                     <div id="flowA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="flowSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instPress">
                 <div class="label">PRESS (BAR) <span class="sensor-status waiting" id="pressStatus">⏳</span></div>
@@ -561,6 +585,7 @@
                     <button id="pressTgl" onclick="toggleSensor('press')" class="btn-toggle btn-active">ON</button>
                     <div id="pressA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="pressSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instNivel">
                 <div class="label">NÍVEL (%) <span class="sensor-status waiting" id="nivelStatus">⏳</span></div>
@@ -569,6 +594,7 @@
                     <button id="nivelTgl" onclick="toggleSensor('nivel')" class="btn-toggle btn-active">ON</button>
                     <div id="nivelA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="nivelSync">🔄 sincronizado</div>
             </div>
             <div class="instrument" id="instPres">
                 <div class="label">PRESENÇA <span class="sensor-status waiting" id="presStatus">⏳</span></div>
@@ -577,6 +603,7 @@
                     <button id="presTgl" onclick="toggleSensor('pres')" class="btn-toggle btn-active">ON</button>
                     <div id="presA" class="alarm"></div>
                 </div>
+                <div class="status-sync" id="presSync">🔄 sincronizado</div>
             </div>
         </div>
         <div class="footer-btns">
@@ -614,7 +641,7 @@
             <label>ZERO GÁS</label><input type="number" id="s6">
             <hr style="border:0; border-top:1px solid #222; margin:10px 0;">
             
-            <!-- NOVA SEÇÃO: CONTROLE DE SMS/WHATSAPP -->
+            <!-- SEÇÃO: CONTROLE DE SMS/WHATSAPP -->
             <div style="margin-bottom:10px;">
                 <label style="color:var(--cyan);">📱 CONTROLE DE NOTIFICAÇÕES</label>
                 <div class="toggle-group">
@@ -676,10 +703,11 @@
         let hasReceivedData = { gas: false, temp: false, flow: false, press: false, nivel: false, pres: false };
         let lastEspPing = 0;
         const ESP_TIMEOUT = 6000;
-
-        // NOVAS VARIÁVEIS PARA CONTROLE SMS/WHATSAPP
         let smsEnabled = true;
         let whatsEnabled = true;
+
+        // Controla se o usuário está interagindo para evitar loop
+        let isUserInteracting = false;
 
         function loadConfigFromESP() {
             client.publish("casa/get/config", "1");
@@ -703,7 +731,6 @@
                     }
                 } catch (e) {}
             }
-            // NOVOS STATUS
             else if (topic === "casa/status/sms") {
                 smsEnabled = (value === "1");
                 updateSmsButtons();
@@ -712,6 +739,61 @@
                 whatsEnabled = (value === "1");
                 updateSmsButtons();
             }
+            // NOVOS STATUS DOS SENSORES
+            else if (topic === "casa/status/gas") {
+                sensorStatus.gas = (value === "1");
+                updateSensorButton('gas');
+                updateSyncStatus('gas');
+            }
+            else if (topic === "casa/status/temp") {
+                sensorStatus.temp = (value === "1");
+                updateSensorButton('temp');
+                updateSyncStatus('temp');
+            }
+            else if (topic === "casa/status/flow") {
+                sensorStatus.flow = (value === "1");
+                updateSensorButton('flow');
+                updateSyncStatus('flow');
+            }
+            else if (topic === "casa/status/press") {
+                sensorStatus.press = (value === "1");
+                updateSensorButton('press');
+                updateSyncStatus('press');
+            }
+            else if (topic === "casa/status/nivel") {
+                sensorStatus.nivel = (value === "1");
+                updateSensorButton('nivel');
+                updateSyncStatus('nivel');
+            }
+            else if (topic === "casa/status/pres") {
+                sensorStatus.pres = (value === "1");
+                updateSensorButton('pres');
+                updateSyncStatus('pres');
+            }
+            else if (topic === "casa/status/mute") {
+                isMuted = (value === "1");
+                document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
+            }
+        }
+
+        function updateSensorButton(type) {
+            const btn = document.getElementById(type + 'Tgl');
+            const isActive = sensorStatus[type];
+            if (isActive) {
+                btn.innerText = "ON";
+                btn.className = 'btn-toggle btn-active';
+            } else {
+                btn.innerText = "OFF";
+                btn.className = 'btn-toggle btn-inactive';
+            }
+        }
+
+        function updateSyncStatus(type) {
+            const syncEl = document.getElementById(type + 'Sync');
+            if (syncEl) {
+                syncEl.textContent = '🟢 sincronizado';
+                syncEl.className = 'status-sync synced';
+            }
         }
 
         function updateSmsButtons() {
@@ -719,14 +801,12 @@
             const whatsBtn = document.getElementById('whatsToggle');
             const footerBtn = document.getElementById('smsToggleBtn');
             
-            // Atualiza botões no modal
             smsBtn.className = 'toggle-btn ' + (smsEnabled ? 'active-sms' : 'inactive');
             smsBtn.textContent = smsEnabled ? '📨 SMS' : '📨 SMS OFF';
             
             whatsBtn.className = 'toggle-btn ' + (whatsEnabled ? 'active-whats' : 'inactive');
             whatsBtn.textContent = whatsEnabled ? '💬 WhatsApp' : '💬 WhatsApp OFF';
             
-            // Atualiza botão no rodapé
             const statusText = smsEnabled ? 'ON' : 'OFF';
             footerBtn.textContent = `📱 SMS: ${statusText}`;
             footerBtn.style.borderColor = smsEnabled ? 'var(--cyan)' : '#333';
@@ -738,6 +818,9 @@
                 alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
                 return;
             }
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
             if (type === 'sms') {
                 smsEnabled = !smsEnabled;
                 client.publish("casa/set/sms_enable", smsEnabled ? "1" : "0");
@@ -746,6 +829,8 @@
                 client.publish("casa/set/whats_enable", whatsEnabled ? "1" : "0");
             }
             updateSmsButtons();
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
         function toggleSmsMode() {
@@ -753,9 +838,14 @@
                 alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
                 return;
             }
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
             smsEnabled = !smsEnabled;
             client.publish("casa/set/sms_enable", smsEnabled ? "1" : "0");
             updateSmsButtons();
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
         function updateEspStatus() {
@@ -885,27 +975,44 @@
 
         function toggleMute() {
             if (isLockdownActive) return;
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
             isMuted = !isMuted;
             document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
             client.publish("casa/set/mute", isMuted ? "1" : "0");
             checkSirenStatus();
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
         function toggleSensor(type) {
             if (isLockdownActive) return;
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
             sensorStatus[type] = !sensorStatus[type];
-            const btn = document.getElementById(type + 'Tgl');
+            updateSensorButton(type);
+            
             const alarmDiv = document.getElementById(type + 'A');
-            if (sensorStatus[type]) {
-                btn.innerText = "ON";
-                btn.classList.add('btn-active');
-            } else {
-                btn.innerText = "OFF";
-                btn.classList.remove('btn-active');
+            if (!sensorStatus[type]) {
                 alarmDiv.classList.remove('alarm-on');
             }
-            client.publish(`casa/set/${type}_on`, sensorStatus[type] ? "1" : "0");
+            
+            // Publica comando para o ESP
+            const topicMap = {
+                gas: 'casa/set/gas_on',
+                temp: 'casa/set/temp_on',
+                flow: 'casa/set/flow_on',
+                press: 'casa/set/press_on',
+                nivel: 'casa/set/nivel_on',
+                pres: 'casa/set/pres_on'
+            };
+            client.publish(topicMap[type], sensorStatus[type] ? "1" : "0");
+            
             checkSirenStatus();
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
         function checkSirenStatus() {
@@ -1005,6 +1112,7 @@
 
         client.on("connect", () => {
             document.getElementById('webLed').classList.add('online');
+            // Inscreve em todos os tópicos necessários
             client.subscribe("casa/set/#");
             client.subscribe("casa/status/#");
             client.subscribe("casa/config/#");
