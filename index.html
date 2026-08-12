@@ -538,6 +538,33 @@
             color: var(--green);
             margin-left: 4px;
         }
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 245, 255, 0.15);
+            border: 1px solid var(--cyan);
+            color: var(--cyan);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            z-index: 2000;
+            display: none;
+            backdrop-filter: blur(10px);
+            text-align: center;
+            max-width: 90%;
+        }
+        .toast.show {
+            display: block;
+            animation: fadeInOut 3s ease;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
+            15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            85% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+        }
         @media (max-width: 600px) {
             .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
             .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
@@ -549,6 +576,8 @@
     </style>
 </head>
 <body>
+    <div id="toast" class="toast">✅ Lista de telefones sincronizada com o ESP</div>
+    
     <div class="container" id="mainContainer">
         <div class="lockdown-overlay" id="lockdownOverlay"></div>
         <div class="header">
@@ -693,6 +722,9 @@
                 <label style="color:var(--green);">📱 TELEFONES CADASTRADOS</label>
                 <div class="phone-counter">
                     <span id="phoneCount">0</span> / 10 números
+                    <span style="margin-left:10px; font-size:0.55rem; color:#666;">
+                        <span id="syncStatus">🔄 carregando...</span>
+                    </span>
                 </div>
                 <div id="limitWarning" class="limit-warning">
                     ⚠️ LIMITE MÁXIMO DE 10 TELEFONES ATINGIDO!
@@ -706,6 +738,7 @@
                     <button onclick="addPhone()" id="addPhoneBtn" class="btn-add-phone" style="flex:1;">➕ ADICIONAR</button>
                     <button onclick="removeAllPhones()" class="btn-remove-all" style="flex:1;">🗑️ REMOVER TODOS</button>
                 </div>
+                <button onclick="syncPhonesFromESP()" style="background:#1f1f22; color:var(--cyan); width:100%; margin-top:5px; border:1px solid #333;">🔄 SINCRONIZAR DO ESP</button>
             </div>
             <button onclick="save()" style="background:var(--cyan); color:#000; width:100%; margin-top:5px;">💾 SALVAR CONFIGURAÇÕES</button>
             <button onclick="document.getElementById('modal').style.display='none'" style="background:none; color:#888; width:100%; margin-top:5px;">VOLTAR</button>
@@ -725,10 +758,25 @@
         let smsEnabled = true;
         let whatsEnabled = true;
         let isUserInteracting = false;
+        let phonesLoadedFromESP = false;
 
         // Prefixo dos tópicos para Estação 01
         const TOPIC_PREFIX = "casa/estacao01";
         const STATION_ID = "01";
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show';
+            setTimeout(() => {
+                toast.className = 'toast';
+            }, 3000);
+        }
+
+        function syncPhonesFromESP() {
+            showToast('🔄 Solicitando lista de telefones do ESP...');
+            client.publish(TOPIC_PREFIX + "/get/phones", "1");
+        }
 
         function loadConfigFromESP() {
             client.publish(TOPIC_PREFIX + "/get/config", "1");
@@ -749,8 +797,14 @@
                     if (Array.isArray(data)) {
                         phones = data;
                         renderPhones();
+                        phonesLoadedFromESP = true;
+                        document.getElementById('syncStatus').textContent = '✅ sincronizado';
+                        document.getElementById('syncStatus').style.color = 'var(--green)';
+                        showToast('✅ Lista de telefones sincronizada com o ESP');
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.error('Erro ao processar lista de telefones:', e);
+                }
             }
             else if (topic === TOPIC_PREFIX + "/status/sms") {
                 smsEnabled = (value === "1");
@@ -1107,7 +1161,9 @@
             renderPhones();
             input.value = '';
             input.focus();
+            // Salva no ESP
             client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
+            showToast('📱 Telefone adicionado e salvo no ESP');
         }
 
         function removePhone(index) {
@@ -1116,6 +1172,7 @@
                 phones.splice(index, 1);
                 renderPhones();
                 client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
+                showToast('📱 Telefone removido do ESP');
             }
         }
 
@@ -1126,6 +1183,7 @@
                 phones = [];
                 renderPhones();
                 client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
+                showToast('🗑️ Todos os telefones removidos do ESP');
             }
         }
 
@@ -1141,6 +1199,7 @@
             client.subscribe(TOPIC_PREFIX + "/pressao/#");
             client.subscribe(TOPIC_PREFIX + "/nivel/#");
             client.subscribe(TOPIC_PREFIX + "/presenca/#");
+            client.subscribe(TOPIC_PREFIX + "/info");
             setTimeout(loadConfigFromESP, 800);
         });
 
@@ -1148,11 +1207,13 @@
             const topic = t.toString();
             const val = m.toString();
 
+            // Processa configurações e status
             if (topic.startsWith(TOPIC_PREFIX + "/config/") || topic.startsWith(TOPIC_PREFIX + "/status/")) {
                 applyConfigFromESP(topic, val);
                 return;
             }
 
+            // Verifica se a estação está online
             if (topic.startsWith(TOPIC_PREFIX) && !topic.includes("/set/")) {
                 isStationOnline = true;
                 lastStationPing = Date.now();
@@ -1256,7 +1317,7 @@
             client.publish(TOPIC_PREFIX + '/set/sms_enable', smsEnabled ? "1" : "0");
             client.publish(TOPIC_PREFIX + '/set/whats_enable', whatsEnabled ? "1" : "0");
             document.getElementById('modal').style.display = 'none';
-            alert('✅ Configurações enviadas para Estação 01 com sucesso!');
+            showToast('✅ Configurações salvas no ESP');
         }
 
         window.onload = () => {
@@ -1270,6 +1331,7 @@
             applyLockdownState();
             updateStationStatus();
             updateSmsButtons();
+            document.getElementById('syncStatus').textContent = '⏳ aguardando ESP...';
         };
 
         function generatePDF() {
