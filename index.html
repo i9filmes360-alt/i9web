@@ -1,1359 +1,680 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - Estação 01</title>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <style>
-        :root {
-            --bg: #0a0a0b;
-            --card: #141416;
-            --vis-bg: #080808;
-            --cyan: #00f5ff;
-            --purple: #8b00ff;
-            --red: #ff2d55;
-            --green: #00ff9d;
-            --yellow: #ffcc00;
-            --btn-gray: #1f1f22;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: #ddd;
-            padding: 5px;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-        }
-        .container {
-            width: 100%;
-            max-width: 1000px;
-            background: var(--card);
-            border-radius: 15px;
-            border: 1px solid #222;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            min-height: 100vh;
-        }
-        .lockdown-overlay {
-            display: none;
-            position: absolute;
-            inset: 0;
-            background: rgba(255, 0, 0, 0.10);
-            border-radius: 15px;
-            z-index: 999;
-            pointer-events: none;
-            animation: pulseOverlay 2s infinite;
-        }
-        .lockdown-overlay.active { display: block; }
-        @keyframes pulseOverlay {
-            0%, 100% { background: rgba(255, 0, 0, 0.08); }
-            50% { background: rgba(255, 0, 0, 0.20); }
-        }
-        .lockdown-watermark {
-            position: fixed;
-            bottom: 15px;
-            left: 15px;
-            z-index: 1000;
-            background: transparent;
-            border: none;
-            color: rgba(255, 255, 255, 0.08);
-            font-size: 0.55rem;
-            font-weight: 300;
-            letter-spacing: 2px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            user-select: none;
-        }
-        .lockdown-watermark:hover {
-            color: rgba(255, 255, 255, 0.25);
-            background: rgba(255, 255, 255, 0.03);
-        }
-        .lockdown-watermark.active {
-            color: rgba(255, 0, 0, 0.40);
-            animation: watermarkPulse 1.5s infinite;
-        }
-        .lockdown-watermark.active:hover { color: rgba(255, 0, 0, 0.70); }
-        @keyframes watermarkPulse {
-            0%, 100% { color: rgba(255, 0, 0, 0.30); }
-            50% { color: rgba(255, 0, 0, 0.50); }
-        }
-        .lockdown-status {
-            position: fixed;
-            bottom: 50px;
-            left: 15px;
-            font-size: 0.5rem;
-            color: rgba(255, 255, 255, 0.08);
-            font-family: 'Courier New', monospace;
-            letter-spacing: 1px;
-            transition: all 0.3s ease;
-            pointer-events: none;
-        }
-        .lockdown-status.active { color: rgba(255, 0, 0, 0.30); }
-        .header {
-            background: #0d0d0f;
-            padding: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #222;
-            flex-wrap: wrap;
-            gap: 5px;
-        }
-        .header h1 {
-            font-size: 0.85rem;
-            color: var(--cyan);
-            letter-spacing: 1px;
-            transition: all 0.3s ease;
-        }
-        .header h1 .station-name {
-            color: var(--green);
-            font-size: 0.7rem;
-            font-weight: 300;
-        }
-        .header h1.lockdown-active {
-            color: var(--red);
-            animation: blinkText 1s infinite;
-        }
-        @keyframes blinkText {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-        .header h1 .station-status {
-            font-size: 0.5rem;
-            color: #666;
-            font-weight: 300;
-        }
-        .header h1 .station-status.online { color: var(--green); }
-        .header h1 .station-status.offline { color: #666; }
-        .led-group { display: flex; gap: 8px; }
-        .led-item { font-size: 0.5rem; color: #666; text-align: center; }
-        .led {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #222;
-            margin: 0 auto 2px;
-        }
-        #webLed.online {
-            background: var(--cyan);
-            box-shadow: 0 0 8px var(--cyan);
-        }
-        #stationLed.online {
-            background: var(--green);
-            box-shadow: 0 0 8px var(--green);
-        }
-        .header-buttons {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .instrument-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            padding: 10px;
-        }
-        .instrument {
-            background: #18181a;
-            border-radius: 12px;
-            padding: 10px;
-            border: 1px solid #252525;
-            transition: 0.3s;
-        }
-        .instrument.lockdown {
-            opacity: 0.3;
-            pointer-events: none;
-            border-color: rgba(255, 0, 0, 0.3);
-        }
-        .instrument .label {
-            font-size: 0.6rem;
-            color: #888;
-            margin-bottom: 5px;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-        .instrument .label .sensor-status {
-            font-size: 0.45rem;
-            font-weight: 300;
-            text-transform: lowercase;
-        }
-        .instrument .label .sensor-status.waiting { color: #666; }
-        .instrument .label .sensor-status.online { color: var(--green); }
-        .visor-interno {
-            background: var(--vis-bg);
-            border-radius: 8px;
-            padding: 5px 10px;
-            border-top: 1px solid #000;
-            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.8);
-        }
-        .display {
-            font-size: 1.6rem;
-            font-weight: 700;
-            font-family: 'Courier New', monospace;
-            color: var(--cyan);
-            text-align: right;
-        }
-        .display.waiting { color: #444; }
-        .bar-wrap {
-            height: 8px;
-            background: #000;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 5px;
-            border: 1px solid #222;
-        }
-        .bar-fill {
-            height: 100%;
-            width: 0%;
-            transition: 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-            background: linear-gradient(90deg, var(--green) 0%, var(--yellow) 50%, var(--red) 100%);
-            box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
-        }
-        .bar-fill.waiting { opacity: 0.1; }
-        .card-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 8px;
-        }
-        .alarm {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: #111;
-            border: 1px solid #000;
-            transition: 0.3s;
-        }
-        .alarm-on {
-            background: var(--red);
-            box-shadow: 0 0 12px var(--red);
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse { 50% { opacity: 0.3; } }
-        .footer-btns {
-            padding: 10px;
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 8px;
-        }
-        button {
-            padding: 10px;
-            font-weight: 700;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.65rem;
-            transition: 0.2s;
-        }
-        .btn-secondary {
-            background: var(--btn-gray);
-            color: #bbb;
-            border: 1px solid #2a2a2a;
-        }
-        .btn-toggle {
-            padding: 4px 8px;
-            font-size: 0.55rem;
-            background: #1f1f22;
-            color: #fff;
-            min-width: 45px;
-            border: 1px solid #333;
-            transition: 0.3s;
-            cursor: pointer;
-        }
-        .btn-toggle:hover {
-            opacity: 0.8;
-        }
-        .btn-active {
-            background: var(--cyan);
-            color: #000;
-            border-color: var(--cyan);
-            box-shadow: 0 0 8px rgba(0, 245, 255, 0.3);
-        }
-        .btn-inactive {
-            background: #2a2a2a;
-            color: #666;
-            border-color: #444;
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 1001;
-            align-items: center;
-            justify-content: center;
-            overflow-y: auto;
-            padding: 10px;
-        }
-        .modal-content {
-            background: #141416;
-            padding: 20px;
-            border-radius: 15px;
-            width: 90%;
-            max-width: 400px;
-            border: 1px solid #333;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        input {
-            width: 100%;
-            padding: 8px;
-            background: #080808;
-            border: 1px solid #2a2a2a;
-            color: var(--cyan);
-            margin-bottom: 8px;
-            border-radius: 5px;
-            outline: none;
-            font-size: 0.8rem;
-        }
-        .modal label {
-            font-size: 0.65rem;
-            color: #888;
-            font-weight: 600;
-            display: block;
-            margin-bottom: 2px;
-        }
-        .api-status {
-            background: #0a0a0b;
-            border-radius: 8px;
-            padding: 10px;
-            margin: 8px 0;
-            border: 1px solid #222;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .api-status .status-label { font-size: 0.65rem; color: #888; }
-        .api-status .status-indicator {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .api-status .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--green);
-            box-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
-        }
-        .api-status .status-text {
-            font-size: 0.7rem;
-            color: var(--green);
-        }
-        .phone-list {
-            background: #0a0a0b;
-            border-radius: 8px;
-            padding: 8px;
-            margin: 8px 0;
-            max-height: 150px;
-            overflow-y: auto;
-            border: 1px solid #222;
-        }
-        .phone-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 4px 8px;
-            margin: 2px 0;
-            background: #141416;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            color: var(--cyan);
-            border-left: 2px solid var(--cyan);
-        }
-        .phone-item .remove-phone {
-            background: var(--red);
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            padding: 2px 8px;
-            font-size: 0.6rem;
-            cursor: pointer;
-        }
-        .phone-counter {
-            font-size: 0.7rem;
-            color: #888;
-            text-align: right;
-            margin-bottom: 4px;
-        }
-        .phone-counter span {
-            color: var(--cyan);
-            font-weight: bold;
-        }
-        .limit-warning {
-            background: var(--red);
-            color: #fff;
-            padding: 6px;
-            border-radius: 5px;
-            font-size: 0.7rem;
-            text-align: center;
-            margin: 5px 0;
-            display: none;
-        }
-        .btn-add-phone {
-            background: var(--green);
-            color: #000;
-            width: 100%;
-            margin-top: 5px;
-            font-weight: 700;
-        }
-        .btn-add-phone:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .btn-remove-all {
-            background: var(--red);
-            color: #fff;
-            width: 100%;
-            margin-top: 5px;
-        }
-        .phone-input-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            background: #080808;
-            border: 1px solid #2a2a2a;
-            border-radius: 5px;
-            padding: 0 5px;
-            margin-bottom: 8px;
-        }
-        .phone-input-wrapper .prefix {
-            color: var(--green);
-            font-weight: bold;
-            font-size: 0.8rem;
-            padding: 8px 0;
-            white-space: nowrap;
-        }
-        .phone-input-wrapper input {
-            border: none;
-            padding: 8px 5px;
-            margin: 0;
-            background: transparent;
-            flex: 1;
-        }
-        .lockdown-modal .modal-content {
-            border: 2px solid rgba(255, 0, 0, 0.3);
-            text-align: center;
-        }
-        .lockdown-modal .modal-content h2 {
-            color: #ff0000;
-            font-size: 1.2rem;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-        }
-        .lockdown-modal .modal-content .icon {
-            font-size: 3rem;
-            margin: 10px 0;
-        }
-        .btn-lockdown-confirm {
-            background: rgba(255, 0, 0, 0.8);
-            color: #fff;
-            width: 100%;
-            padding: 12px;
-            font-size: 0.9rem;
-            font-weight: 700;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-        }
-        .btn-lockdown-cancel {
-            background: #333;
-            color: #fff;
-            width: 100%;
-            padding: 12px;
-            font-size: 0.9rem;
-            font-weight: 700;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            margin-top: 5px;
-        }
-        #lockdown_msg {
-            color: #ff0000;
-            font-size: 0.8rem;
-            margin: 8px 0;
-            display: none;
-        }
-        .toggle-group {
-            display: flex;
-            gap: 10px;
-            margin: 8px 0;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        .toggle-btn {
-            padding: 6px 16px;
-            border-radius: 20px;
-            border: 2px solid #333;
-            font-size: 0.7rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: 0.3s;
-            background: #1a1a1a;
-            color: #666;
-        }
-        .toggle-btn.active-sms {
-            border-color: var(--cyan);
-            background: rgba(0, 245, 255, 0.15);
-            color: var(--cyan);
-        }
-        .toggle-btn.active-whats {
-            border-color: #25D366;
-            background: rgba(37, 211, 102, 0.15);
-            color: #25D366;
-        }
-        .toggle-btn.inactive {
-            border-color: #333;
-            background: #1a1a1a;
-            color: #444;
-        }
-        .toggle-btn .icon { margin-right: 4px; }
-        .status-sync {
-            font-size: 0.45rem;
-            color: #444;
-            text-align: center;
-            margin-top: 2px;
-            transition: 0.3s;
-        }
-        .status-sync.synced {
-            color: var(--green);
-        }
-        .station-badge {
-            display: inline-block;
-            background: rgba(0, 255, 157, 0.1);
-            border: 1px solid rgba(0, 255, 157, 0.2);
-            border-radius: 4px;
-            padding: 2px 8px;
-            font-size: 0.5rem;
-            color: var(--green);
-            margin-left: 4px;
-        }
-        .toast {
-            position: fixed;
-            bottom: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 245, 255, 0.15);
-            border: 1px solid var(--cyan);
-            color: var(--cyan);
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 0.7rem;
-            z-index: 2000;
-            display: none;
-            backdrop-filter: blur(10px);
-            text-align: center;
-            max-width: 90%;
-        }
-        .toast.show {
-            display: block;
-            animation: fadeInOut 3s ease;
-        }
-        @keyframes fadeInOut {
-            0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
-            15% { opacity: 1; transform: translateX(-50%) translateY(0); }
-            85% { opacity: 1; transform: translateX(-50%) translateY(0); }
-            100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-        }
-        @media (max-width: 600px) {
-            .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
-            .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
-            .display { font-size: 1.2rem; }
-            .instrument-grid { gap: 5px; padding: 5px; }
-            .instrument { padding: 6px; }
-            .footer-btns { grid-template-columns: 1fr 1fr; }
-        }
-    </style>
-</head>
-<body>
-    <div id="toast" class="toast">✅ Lista de telefones sincronizada com o ESP</div>
+// =============================================
+// WellGuard PRO X - Versão 10.9.3 (Infobip)
+// Estação: 01
+// =============================================
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <HTTPClient.h>
+#include <math.h>
+#include <esp_task_wdt.h>
+#include <ArduinoJson.h>
+#include <Preferences.h>
+
+// ==================== IDENTIFICAÇÃO DA ESTAÇÃO ====================
+const char* STATION_ID = "01";
+const char* STATION_NAME = "Estação 01";
+
+// ==================== CONFIGURAÇÕES INFOBIP ====================
+const char* SMS_API_URL = "https://8vn653.api.infobip.com/sms/2/text/advanced";
+const char* SMS_API_TOKEN = "4062e356762acf8788997ed104277286-80f6a195-8b8b-41c5-bf57-d62f0a510e5f";
+const char* SMS_SENDER = "29175"; // Número do remetente (pode ser alfanumérico ou número)
+
+// ==================== MULTI WIFI ====================
+struct WiFiNetwork {
+  const char* ssid;
+  const char* password;
+};
+
+const WiFiNetwork networks[] = {
+  {"Wellcon ADM", "@w3llc0n"},
+  {"CASA DA VOVO", "bpa6tfor"},
+  {"bbnetto", "12345678"},
+  {"SuaRede4", "senha456"},
+  {"SuaRede5", "senha789"}
+};
+const int numNetworks = sizeof(networks) / sizeof(networks[0]);
+
+const char* mqtt_server = "broker.emqx.io";
+const char* deviceID    = "esp32_wellguard_station01";
+
+// Tópicos com identificação da estação
+char topicGas[50];
+char topicTemp[50];
+char topicFlow[50];
+char topicPressao[50];
+char topicNivel[50];
+char topicPresenca[50];
+char topicMute[50];
+char topicPresOn[50];
+char topicGasOn[50];
+char topicTempOn[50];
+char topicFlowOn[50];
+char topicPressOn[50];
+char topicNivelOn[50];
+char topicPhones[50];
+char topicLockdown[50];
+char topicLockdownStatus[50];
+char topicLockdownGet[50];
+char topicGetConfig[50];
+char topicGetPhones[50];
+char topicSmsEnable[50];
+char topicWhatsEnable[50];
+char topicSmsStatus[50];
+char topicWhatsStatus[50];
+char topicGasStatus[50];
+char topicTempStatus[50];
+char topicFlowStatus[50];
+char topicPressStatus[50];
+char topicNivelStatus[50];
+char topicPresStatus[50];
+char topicMuteStatus[50];
+char topicStationInfo[50];
+
+// Pinos
+#define PIN_NIVEL          34
+#define PIN_GAS            32
+#define PIN_NTC            33
+#define PIN_FLOW           27
+#define PIN_BUZZER         13
+#define PIN_RELE           15
+#define PIN_LED_STATUS     2
+#define PIN_SENSOR_PRESSAO 25
+#define PIN_SENSOR_PRESENCA 26
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+Preferences preferences;
+
+// Variáveis
+unsigned long lastMillis = 0;
+unsigned long muteStartTime = 0;
+unsigned long lastWhatsAppTime = 0;
+unsigned long lastSMSTime = 0;
+const unsigned long MUTE_TIMEOUT     = 45000;
+const unsigned long WHATSAPP_INTERVAL = 45000;
+const unsigned long SMS_INTERVAL      = 60000;
+
+int   spGas   = 2000;
+float spTemp  = 50.0;
+float spFlow  = 10.0;
+float spPress = 4.0;
+float spNivel = 80.0;
+int   baseGas = 0;
+
+String phones[10];
+int phoneCount = 0;
+
+bool alarmeSilenciado   = false;
+bool ultimoEstadoAlarme = false;
+bool lockdownAtivo      = false;
+
+bool gasMonitorado      = true;
+bool tempMonitorado     = true;
+bool flowMonitorado     = true;
+bool pressMonitorado    = true;
+bool nivelMonitorado    = true;
+bool presencaMonitorada = true;
+bool presencaAtual      = false;
+
+bool smsEnabled    = true;
+bool whatsEnabled  = true;
+
+float gasF = 0, tempF = 0, nivelF = 0;
+const float alpha = 0.12;
+
+volatile int flowPulses = 0;
+volatile unsigned int pulsosPressao = 0;
+bool perigoAtual = false;
+
+void IRAM_ATTR countPulses() { flowPulses++; }
+void IRAM_ATTR contarPulsoPressao() { pulsosPressao++; }
+
+// ==================== INICIALIZAÇÃO DOS TÓPICOS ====================
+void initTopics() {
+  snprintf(topicGas, sizeof(topicGas), "casa/estacao%s/gas/vazamento", STATION_ID);
+  snprintf(topicTemp, sizeof(topicTemp), "casa/estacao%s/temp/ambiente", STATION_ID);
+  snprintf(topicFlow, sizeof(topicFlow), "casa/estacao%s/fluxo/agua", STATION_ID);
+  snprintf(topicPressao, sizeof(topicPressao), "casa/estacao%s/pressao/agua", STATION_ID);
+  snprintf(topicNivel, sizeof(topicNivel), "casa/estacao%s/nivel/caixa", STATION_ID);
+  snprintf(topicPresenca, sizeof(topicPresenca), "casa/estacao%s/presenca/status", STATION_ID);
+  snprintf(topicMute, sizeof(topicMute), "casa/estacao%s/set/mute", STATION_ID);
+  snprintf(topicPresOn, sizeof(topicPresOn), "casa/estacao%s/set/pres_on", STATION_ID);
+  snprintf(topicGasOn, sizeof(topicGasOn), "casa/estacao%s/set/gas_on", STATION_ID);
+  snprintf(topicTempOn, sizeof(topicTempOn), "casa/estacao%s/set/temp_on", STATION_ID);
+  snprintf(topicFlowOn, sizeof(topicFlowOn), "casa/estacao%s/set/flow_on", STATION_ID);
+  snprintf(topicPressOn, sizeof(topicPressOn), "casa/estacao%s/set/press_on", STATION_ID);
+  snprintf(topicNivelOn, sizeof(topicNivelOn), "casa/estacao%s/set/nivel_on", STATION_ID);
+  snprintf(topicPhones, sizeof(topicPhones), "casa/estacao%s/set/phones", STATION_ID);
+  snprintf(topicLockdown, sizeof(topicLockdown), "casa/estacao%s/set/lockdown", STATION_ID);
+  snprintf(topicLockdownStatus, sizeof(topicLockdownStatus), "casa/estacao%s/status/lockdown", STATION_ID);
+  snprintf(topicLockdownGet, sizeof(topicLockdownGet), "casa/estacao%s/get/lockdown", STATION_ID);
+  snprintf(topicGetConfig, sizeof(topicGetConfig), "casa/estacao%s/get/config", STATION_ID);
+  snprintf(topicGetPhones, sizeof(topicGetPhones), "casa/estacao%s/get/phones", STATION_ID);
+  snprintf(topicSmsEnable, sizeof(topicSmsEnable), "casa/estacao%s/set/sms_enable", STATION_ID);
+  snprintf(topicWhatsEnable, sizeof(topicWhatsEnable), "casa/estacao%s/set/whats_enable", STATION_ID);
+  snprintf(topicSmsStatus, sizeof(topicSmsStatus), "casa/estacao%s/status/sms", STATION_ID);
+  snprintf(topicWhatsStatus, sizeof(topicWhatsStatus), "casa/estacao%s/status/whats", STATION_ID);
+  snprintf(topicGasStatus, sizeof(topicGasStatus), "casa/estacao%s/status/gas", STATION_ID);
+  snprintf(topicTempStatus, sizeof(topicTempStatus), "casa/estacao%s/status/temp", STATION_ID);
+  snprintf(topicFlowStatus, sizeof(topicFlowStatus), "casa/estacao%s/status/flow", STATION_ID);
+  snprintf(topicPressStatus, sizeof(topicPressStatus), "casa/estacao%s/status/press", STATION_ID);
+  snprintf(topicNivelStatus, sizeof(topicNivelStatus), "casa/estacao%s/status/nivel", STATION_ID);
+  snprintf(topicPresStatus, sizeof(topicPresStatus), "casa/estacao%s/status/pres", STATION_ID);
+  snprintf(topicMuteStatus, sizeof(topicMuteStatus), "casa/estacao%s/status/mute", STATION_ID);
+  snprintf(topicStationInfo, sizeof(topicStationInfo), "casa/estacao%s/info", STATION_ID);
+}
+
+// ==================== PERSISTÊNCIA ====================
+void saveConfig() {
+  preferences.begin("wellguard", false);
+  preferences.putInt("spGas", spGas);
+  preferences.putFloat("spTemp", spTemp);
+  preferences.putFloat("spFlow", spFlow);
+  preferences.putFloat("spPress", spPress);
+  preferences.putFloat("spNivel", spNivel);
+  preferences.putInt("baseGas", baseGas);
+  preferences.putBool("smsEnabled", smsEnabled);
+  preferences.putBool("whatsEnabled", whatsEnabled);
+  preferences.end();
+}
+
+void loadConfig() {
+  preferences.begin("wellguard", true);
+  spGas   = preferences.getInt("spGas", 2000);
+  spTemp  = preferences.getFloat("spTemp", 50.0);
+  spFlow  = preferences.getFloat("spFlow", 10.0);
+  spPress = preferences.getFloat("spPress", 4.0);
+  spNivel = preferences.getFloat("spNivel", 80.0);
+  baseGas = preferences.getInt("baseGas", 0);
+  smsEnabled = preferences.getBool("smsEnabled", true);
+  whatsEnabled = preferences.getBool("whatsEnabled", true);
+  preferences.end();
+}
+
+void savePhones() {
+  preferences.begin("wellguard", false);
+  preferences.putInt("phoneCount", phoneCount);
+  for (int i = 0; i < 10; i++) {
+    String key = "phone" + String(i);
+    if (i < phoneCount) preferences.putString(key.c_str(), phones[i]);
+    else preferences.remove(key.c_str());
+  }
+  preferences.end();
+  Serial.printf("💾 %d telefones salvos na memória do ESP\n", phoneCount);
+}
+
+void loadPhones() {
+  preferences.begin("wellguard", true);
+  phoneCount = preferences.getInt("phoneCount", 0);
+  if (phoneCount > 10) phoneCount = 10;
+  for (int i = 0; i < phoneCount; i++) {
+    String key = "phone" + String(i);
+    phones[i] = preferences.getString(key.c_str(), "");
+  }
+  preferences.end();
+  Serial.printf("📂 %d telefones carregados da memória do ESP\n", phoneCount);
+}
+
+// ==================== LOCKDOWN ====================
+void aplicarLockdown() {
+  if (lockdownAtivo) {
+    gasMonitorado = tempMonitorado = flowMonitorado = pressMonitorado = nivelMonitorado = presencaMonitorada = false;
+    perigoAtual = false;
+    controleSirene();
+    Serial.println("🔒 LOCKDOWN ATIVADO - Estação 01");
+    client.publish(topicLockdownStatus, "1", true);
+  } else {
+    gasMonitorado = tempMonitorado = flowMonitorado = pressMonitorado = nivelMonitorado = presencaMonitorada = true;
+    Serial.println("🔓 LOCKDOWN DESATIVADO - Estação 01");
+    client.publish(topicLockdownStatus, "0", true);
+  }
+}
+
+// ==================== TELEFONES ====================
+void processPhoneList(String jsonData) {
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, jsonData);
+  if (error) {
+    Serial.println("❌ Erro JSON telefones");
+    return;
+  }
+  phoneCount = 0;
+  if (doc.is<JsonArray>()) {
+    JsonArray arr = doc.as<JsonArray>();
+    for (JsonVariant v : arr) {
+      if (phoneCount < 10) {
+        phones[phoneCount] = v.as<String>();
+        phoneCount++;
+      }
+    }
+  }
+  savePhones();
+  Serial.printf("📱 %d telefones salvos no ESP\n", phoneCount);
+  
+  DynamicJsonDocument pubDoc(1024);
+  JsonArray pubArr = pubDoc.to<JsonArray>();
+  for (int i = 0; i < phoneCount; i++) pubArr.add(phones[i]);
+  String pubJson;
+  serializeJson(pubArr, pubJson);
+  char configPhones[50];
+  snprintf(configPhones, sizeof(configPhones), "casa/estacao01/config/phones");
+  client.publish(configPhones, pubJson.c_str(), true);
+}
+
+// ==================== SMS INFOBIP ====================
+void sendSMS(const String& mensagem) {
+  if (!smsEnabled) {
+    Serial.println("📵 SMS desabilitado pelo usuário");
+    return;
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("⚠️ WiFi desconectado");
+    return;
+  }
+  if (phoneCount == 0) {
+    Serial.println("⚠️ Nenhum telefone cadastrado");
+    return;
+  }
+  if (millis() - lastSMSTime < SMS_INTERVAL) {
+    Serial.println("⏳ Aguardando intervalo entre SMS");
+    return;
+  }
+
+  // Escapa caracteres especiais para JSON
+  String msgEscaped = mensagem;
+  msgEscaped.replace("\\", "\\\\");
+  msgEscaped.replace("\"", "\\\"");
+  msgEscaped.replace("\n", "\\n");
+
+  for (int i = 0; i < phoneCount; i++) {
+    HTTPClient http;
     
-    <div class="container" id="mainContainer">
-        <div class="lockdown-overlay" id="lockdownOverlay"></div>
-        <div class="header">
-            <h1 id="headerTitle">
-                WELLGUARD PRO X
-                <span class="station-name">📍 Estação 01</span>
-                <span class="station-status offline" id="stationStatusLabel">[⏳ aguardando estação]</span>
-            </h1>
-            <div class="header-buttons">
-                <div class="led-group">
-                    <div class="led-item"><div id="webLed" class="led"></div>WEB</div>
-                    <div class="led-item"><div id="stationLed" class="led"></div>EST</div>
-                </div>
-                <button id="fullBtn" onclick="toggleFullscreen()" class="btn-secondary" title="Tela Cheia">⛶</button>
-                <button id="muteBtn" onclick="toggleMute()" class="btn-secondary">MUTE</button>
-            </div>
-        </div>
-        <div class="instrument-grid">
-            <div class="instrument" id="instGas">
-                <div class="label">GÁS (PPM) <span class="sensor-status waiting" id="gasStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="gasV">----</div><div class="bar-wrap"><div id="gasB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="gasTgl" onclick="toggleSensor('gas')" class="btn-toggle btn-active">ON</button>
-                    <div id="gasA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="gasSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instTemp">
-                <div class="label">TEMP (°C) <span class="sensor-status waiting" id="tempStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="tempV">--.-</div><div class="bar-wrap"><div id="tempB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="tempTgl" onclick="toggleSensor('temp')" class="btn-toggle btn-active">ON</button>
-                    <div id="tempA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="tempSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instFlow">
-                <div class="label">VAZÃO (L/M) <span class="sensor-status waiting" id="flowStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="flowV">--.-</div><div class="bar-wrap"><div id="flowB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="flowTgl" onclick="toggleSensor('flow')" class="btn-toggle btn-active">ON</button>
-                    <div id="flowA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="flowSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instPress">
-                <div class="label">PRESS (BAR) <span class="sensor-status waiting" id="pressStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="pressV">--.--</div><div class="bar-wrap"><div id="pressB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="pressTgl" onclick="toggleSensor('press')" class="btn-toggle btn-active">ON</button>
-                    <div id="pressA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="pressSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instNivel">
-                <div class="label">NÍVEL (%) <span class="sensor-status waiting" id="nivelStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="nivelV">--.-</div><div class="bar-wrap"><div id="nivelB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="nivelTgl" onclick="toggleSensor('nivel')" class="btn-toggle btn-active">ON</button>
-                    <div id="nivelA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="nivelSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instPres">
-                <div class="label">PRESENÇA <span class="sensor-status waiting" id="presStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="presV" style="text-align:center; font-size:1.1rem;">⏳</div></div>
-                <div class="card-controls">
-                    <button id="presTgl" onclick="toggleSensor('pres')" class="btn-toggle btn-active">ON</button>
-                    <div id="presA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="presSync">🔄 sincronizado</div>
-            </div>
-        </div>
-        <div class="footer-btns">
-            <button class="btn-secondary" onclick="generatePDF()">📄 PDF</button>
-            <button class="btn-secondary" onclick="document.getElementById('modal').style.display='flex'">⚙️ CONFIG</button>
-            <button id="smsToggleBtn" class="btn-secondary" onclick="toggleSmsMode()">📱 SMS: ON</button>
-        </div>
-    </div>
+    String number = phones[i];
+    // Remove o + se existir
+    if (number.startsWith("+")) number = number.substring(1);
+    
+    // Formato do payload para Infobip
+    String payload = "{";
+    payload += "\"messages\":[{";
+    payload += "\"from\":\"" + String(SMS_SENDER) + "\",";
+    payload += "\"destinations\":[{\"to\":\"" + number + "\"}],";
+    payload += "\"text\":\"" + msgEscaped + "\"";
+    payload += "}]";
+    payload += "}";
+   
+    Serial.printf("📨 Enviando SMS Infobip para %s...\n", number.c_str());
+    Serial.printf("📦 Payload: %s\n", payload.c_str());
+   
+    http.begin(SMS_API_URL);
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Authorization", "App " + String(SMS_API_TOKEN));
+    http.addHeader("Accept", "application/json");
+    
+    int httpCode = http.POST(payload);
+    String response = http.getString();
+   
+    if (httpCode > 0) {
+      Serial.printf("✅ Infobip HTTP %d\n", httpCode);
+      Serial.println(response);
+    } else {
+      Serial.printf("❌ Erro SMS: %s\n", http.errorToString(httpCode).c_str());
+      Serial.println(response);
+    }
+    http.end();
+    delay(400);
+  }
+ 
+  lastSMSTime = millis();
+}
 
-    <button id="lockdownBtn" class="lockdown-watermark" onclick="toggleLockdown()">⚡ LOCKDOWN</button>
-    <div id="lockdownStatus" class="lockdown-status">🔒 sistema seguro</div>
+// ==================== WHATSAPP (CallMeBot - Gratuito) ====================
+void sendWhatsApp(const String& mensagem) {
+  if (!whatsEnabled) {
+    Serial.println("📵 WhatsApp desabilitado pelo usuário");
+    return;
+  }
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (millis() - lastWhatsAppTime < WHATSAPP_INTERVAL) return;
 
-    <div id="lockdownModal" class="modal lockdown-modal">
-        <div class="modal-content">
-            <div class="icon">🔒</div>
-            <h2 id="lockdownModalTitle">ATIVAR LOCKDOWN</h2>
-            <p style="color:#888; font-size:0.8rem; margin-bottom:10px;">
-                <span id="lockdownDesc">Digite a senha para ATIVAR o bloqueio total do sistema</span>
-            </p>
-            <input type="password" id="lockdownPassword" placeholder="Digite a senha de segurança" style="text-align:center; font-size:1rem;">
-            <div id="lockdown_msg">Senha incorreta! Tente novamente.</div>
-            <button class="btn-lockdown-confirm" onclick="confirmLockdown()">✓ CONFIRMAR</button>
-            <button class="btn-lockdown-cancel" onclick="closeLockdownModal()">✕ CANCELAR</button>
-        </div>
-    </div>
+  HTTPClient http;
+  String texto = mensagem;
+  texto.replace(" ", "+");
+  texto.replace("\n", "%0A");
+  texto.replace("°", "%C2%B0");
 
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <h3 style="color:var(--cyan); font-size:0.8rem; margin-bottom:10px; text-align:center;">
-                CONFIGURAÇÕES - Estação 01
-                <span style="display:block; font-size:0.55rem; color:#666; margin-top:2px;">ID: 01</span>
-            </h3>
-            <label>SP GÁS</label><input type="number" id="s1">
-            <label>SP TEMP</label><input type="number" id="s2">
-            <label>SP VAZÃO</label><input type="number" id="s3">
-            <label>SP PRESS</label><input type="number" id="s4" step="0.1">
-            <label>SP NÍVEL</label><input type="number" id="s5">
-            <label>ZERO GÁS</label><input type="number" id="s6">
-            <hr style="border:0; border-top:1px solid #222; margin:10px 0;">
-            
-            <!-- SEÇÃO: CONTROLE DE SMS/WHATSAPP -->
-            <div style="margin-bottom:10px;">
-                <label style="color:var(--cyan);">📱 CONTROLE DE NOTIFICAÇÕES</label>
-                <div class="toggle-group">
-                    <button id="smsToggle" class="toggle-btn active-sms" onclick="toggleNotification('sms')">
-                        <span class="icon">📨</span> SMS
-                    </button>
-                    <button id="whatsToggle" class="toggle-btn active-whats" onclick="toggleNotification('whats')">
-                        <span class="icon">💬</span> WhatsApp
-                    </button>
-                </div>
-                <div style="font-size:0.55rem; color:#666; text-align:center; margin-top:4px;">
-                    Clique para ativar/desativar o envio de alertas
-                </div>
-            </div>
+  String url = "https://api.callmebot.com/whatsapp.php?phone=5579981182425&text=" + texto + "&apikey=2921828";
+  http.begin(url);
+  int httpCode = http.GET();
+  if (httpCode > 0) {
+    lastWhatsAppTime = millis();
+    Serial.printf("✅ WhatsApp OK (%d)\n", httpCode);
+  } else {
+    Serial.printf("❌ WhatsApp erro: %s\n", http.errorToString(httpCode).c_str());
+  }
+  http.end();
+}
 
-            <div style="margin-bottom:10px;">
-                <label style="color:var(--green);">📡 STATUS DA API SMS</label>
-                <div class="api-status">
-                    <span class="status-label">🔐 Infobip</span>
-                    <div class="status-indicator">
-                        <span class="status-dot"></span>
-                        <span class="status-text">✅ Configurada no ESP</span>
-                    </div>
-                </div>
-                <div style="font-size:0.6rem; color:#666; text-align:center; margin-top:-5px;">
-                    Credenciais ficam apenas no ESP • Mais seguro
-                </div>
-            </div>
-            <div style="border-top:1px solid #222; padding-top:10px; margin-top:10px;">
-                <label style="color:var(--green);">📱 TELEFONES CADASTRADOS</label>
-                <div class="phone-counter">
-                    <span id="phoneCount">0</span> / 10 números
-                    <span style="margin-left:10px; font-size:0.55rem; color:#666;">
-                        <span id="syncStatus">🔄 carregando...</span>
-                    </span>
-                </div>
-                <div id="limitWarning" class="limit-warning">
-                    ⚠️ LIMITE MÁXIMO DE 10 TELEFONES ATINGIDO!
-                </div>
-                <div id="phoneList" class="phone-list"></div>
-                <div class="phone-input-wrapper">
-                    <span class="prefix">+55</span>
-                    <input type="text" id="newPhone" placeholder="DDD + Número (ex: 79981182425)">
-                </div>
-                <div style="display:flex; gap:5px;">
-                    <button onclick="addPhone()" id="addPhoneBtn" class="btn-add-phone" style="flex:1;">➕ ADICIONAR</button>
-                    <button onclick="removeAllPhones()" class="btn-remove-all" style="flex:1;">🗑️ REMOVER TODOS</button>
-                </div>
-                <button onclick="syncPhonesFromESP()" style="background:#1f1f22; color:var(--cyan); width:100%; margin-top:5px; border:1px solid #333;">🔄 SINCRONIZAR DO ESP</button>
-            </div>
-            <button onclick="save()" style="background:var(--cyan); color:#000; width:100%; margin-top:5px;">💾 SALVAR CONFIGURAÇÕES</button>
-            <button onclick="document.getElementById('modal').style.display='none'" style="background:none; color:#888; width:100%; margin-top:5px;">VOLTAR</button>
-        </div>
-    </div>
+// ==================== SIRENE ====================
+void controleSirene() {
+  bool sirenOn = perigoAtual && !alarmeSilenciado && !lockdownAtivo;
+  if (sirenOn) {
+    digitalWrite(PIN_RELE, LOW);
+    tone(PIN_BUZZER, 880);
+  } else {
+    digitalWrite(PIN_RELE, HIGH);
+    noTone(PIN_BUZZER);
+  }
+}
 
-    <script>
-        const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
-        let audioCtx = null, sirenInterval = null, isMuted = false;
-        const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
-        let phones = [];
-        let isLockdownActive = false;
-        let isStationOnline = false;
-        let hasReceivedData = { gas: false, temp: false, flow: false, press: false, nivel: false, pres: false };
-        let lastStationPing = 0;
-        const STATION_TIMEOUT = 6000;
-        let smsEnabled = true;
-        let whatsEnabled = true;
-        let isUserInteracting = false;
-        let phonesLoadedFromESP = false;
+// ==================== WIFI ====================
+void setup_wifi() {
+  pinMode(PIN_LED_STATUS, OUTPUT);
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
 
-        // Prefixo dos tópicos para Estação 01
-        const TOPIC_PREFIX = "casa/estacao01";
-        const STATION_ID = "01";
+  for (int i = 0; i < numNetworks; i++) {
+    Serial.printf("Tentando: %s\n", networks[i].ssid);
+    WiFi.disconnect(true);
+    delay(500);
+    WiFi.begin(networks[i].ssid, networks[i].password);
+    int timeout = 0;
+    while (WiFi.status() != WL_CONNECTED && timeout < 25) {
+      digitalWrite(PIN_LED_STATUS, !digitalRead(PIN_LED_STATUS));
+      delay(400);
+      timeout++;
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.print("✅ Conectado | IP: ");
+      Serial.println(WiFi.localIP());
+      digitalWrite(PIN_LED_STATUS, HIGH);
+      return;
+    }
+  }
+  ESP.restart();
+}
 
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = 'toast show';
-            setTimeout(() => {
-                toast.className = 'toast';
-            }, 3000);
-        }
+// ==================== CALLBACK MQTT ====================
+void callback(char* topic, byte* payload, unsigned int length) {
+  String msg;
+  for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
+  String t = String(topic);
 
-        function syncPhonesFromESP() {
-            showToast('🔄 Solicitando lista de telefones do ESP...');
-            client.publish(TOPIC_PREFIX + "/get/phones", "1");
-        }
+  if (t == topicMute) {
+    alarmeSilenciado = (msg == "1");
+    if (alarmeSilenciado) muteStartTime = millis();
+    client.publish(topicMuteStatus, msg.c_str(), true);
+  }
+  else if (t == topicGasOn) {
+    gasMonitorado = (msg == "1");
+    client.publish(topicGasStatus, msg.c_str(), true);
+  }
+  else if (t == topicTempOn) {
+    tempMonitorado = (msg == "1");
+    client.publish(topicTempStatus, msg.c_str(), true);
+  }
+  else if (t == topicFlowOn) {
+    flowMonitorado = (msg == "1");
+    client.publish(topicFlowStatus, msg.c_str(), true);
+  }
+  else if (t == topicPressOn) {
+    pressMonitorado = (msg == "1");
+    client.publish(topicPressStatus, msg.c_str(), true);
+  }
+  else if (t == topicNivelOn) {
+    nivelMonitorado = (msg == "1");
+    client.publish(topicNivelStatus, msg.c_str(), true);
+  }
+  else if (t == topicPresOn) {
+    presencaMonitorada = (msg == "1");
+    client.publish(topicPresStatus, msg.c_str(), true);
+  }
+  else if (t == topicSmsEnable) {
+    smsEnabled = (msg == "1");
+    saveConfig();
+    client.publish(topicSmsStatus, smsEnabled ? "1" : "0", true);
+    Serial.printf("📱 SMS %s\n", smsEnabled ? "HABILITADO" : "DESABILITADO");
+  }
+  else if (t == topicWhatsEnable) {
+    whatsEnabled = (msg == "1");
+    saveConfig();
+    client.publish(topicWhatsStatus, whatsEnabled ? "1" : "0", true);
+    Serial.printf("💬 WhatsApp %s\n", whatsEnabled ? "HABILITADO" : "DESABILITADO");
+  }
+  else if (t == "casa/estacao01/set/s1") { spGas   = msg.toInt();   saveConfig(); }
+  else if (t == "casa/estacao01/set/s2") { spTemp  = msg.toFloat(); saveConfig(); }
+  else if (t == "casa/estacao01/set/s3") { spFlow  = msg.toFloat(); saveConfig(); }
+  else if (t == "casa/estacao01/set/s4") { spPress = msg.toFloat(); saveConfig(); }
+  else if (t == "casa/estacao01/set/s5") { spNivel = msg.toFloat(); saveConfig(); }
+  else if (t == "casa/estacao01/set/s6") { baseGas = msg.toInt();   saveConfig(); }
 
-        function loadConfigFromESP() {
-            client.publish(TOPIC_PREFIX + "/get/config", "1");
-            client.publish(TOPIC_PREFIX + "/get/phones", "1");
-            client.publish(TOPIC_PREFIX + "/get/lockdown", "1");
-        }
+  else if (t == topicPhones) {
+    processPhoneList(msg);
+  }
+  else if (t == topicLockdown) {
+    bool novo = (msg == "1");
+    if (novo != lockdownAtivo) {
+      lockdownAtivo = novo;
+      aplicarLockdown();
+    }
+  }
+  else if (t == topicLockdownGet) {
+    client.publish(topicLockdownStatus, lockdownAtivo ? "1" : "0", true);
+  }
+  else if (t == topicGetConfig) {
+    char configTopic[50];
+    snprintf(configTopic, sizeof(configTopic), "casa/estacao01/config/s1");
+    client.publish(configTopic, String(spGas).c_str());
+    snprintf(configTopic, sizeof(configTopic), "casa/estacao01/config/s2");
+    client.publish(configTopic, String(spTemp, 1).c_str());
+    snprintf(configTopic, sizeof(configTopic), "casa/estacao01/config/s3");
+    client.publish(configTopic, String(spFlow, 1).c_str());
+    snprintf(configTopic, sizeof(configTopic), "casa/estacao01/config/s4");
+    client.publish(configTopic, String(spPress, 2).c_str());
+    snprintf(configTopic, sizeof(configTopic), "casa/estacao01/config/s5");
+    client.publish(configTopic, String(spNivel, 1).c_str());
+    snprintf(configTopic, sizeof(configTopic), "casa/estacao01/config/s6");
+    client.publish(configTopic, String(baseGas).c_str());
+    client.publish(topicSmsStatus, smsEnabled ? "1" : "0", true);
+    client.publish(topicWhatsStatus, whatsEnabled ? "1" : "0", true);
+    client.publish(topicGasStatus, gasMonitorado ? "1" : "0", true);
+    client.publish(topicTempStatus, tempMonitorado ? "1" : "0", true);
+    client.publish(topicFlowStatus, flowMonitorado ? "1" : "0", true);
+    client.publish(topicPressStatus, pressMonitorado ? "1" : "0", true);
+    client.publish(topicNivelStatus, nivelMonitorado ? "1" : "0", true);
+    client.publish(topicPresStatus, presencaMonitorada ? "1" : "0", true);
+    client.publish(topicMuteStatus, alarmeSilenciado ? "1" : "0", true);
+    
+    DynamicJsonDocument infoDoc(256);
+    infoDoc["id"] = STATION_ID;
+    infoDoc["name"] = STATION_NAME;
+    infoDoc["version"] = "10.9.3";
+    infoDoc["api"] = "Infobip";
+    String infoStr;
+    serializeJson(infoDoc, infoStr);
+    client.publish(topicStationInfo, infoStr.c_str(), true);
+    
+    DynamicJsonDocument phoneDoc(1024);
+    JsonArray phoneArr = phoneDoc.to<JsonArray>();
+    for (int i = 0; i < phoneCount; i++) phoneArr.add(phones[i]);
+    String phoneJson;
+    serializeJson(phoneArr, phoneJson);
+    snprintf(configTopic, sizeof(configTopic), "casa/estacao01/config/phones");
+    client.publish(configTopic, phoneJson.c_str(), true);
+    Serial.println("📤 Lista de telefones enviada para todos os clientes");
+  }
+  else if (t == topicGetPhones) {
+    DynamicJsonDocument doc(1024);
+    JsonArray arr = doc.to<JsonArray>();
+    for (int i = 0; i < phoneCount; i++) arr.add(phones[i]);
+    String jsonStr;
+    serializeJson(arr, jsonStr);
+    char configPhones[50];
+    snprintf(configPhones, sizeof(configPhones), "casa/estacao01/config/phones");
+    client.publish(configPhones, jsonStr.c_str(), true);
+    Serial.println("📤 Lista de telefones enviada por solicitação");
+  }
+}
 
-        function applyConfigFromESP(topic, value) {
-            if (topic === TOPIC_PREFIX + "/config/s1") document.getElementById('s1').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s2") document.getElementById('s2').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s3") document.getElementById('s3').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s4") document.getElementById('s4').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s5") document.getElementById('s5').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s6") document.getElementById('s6').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/phones") {
-                try {
-                    const data = JSON.parse(value);
-                    if (Array.isArray(data)) {
-                        phones = data;
-                        renderPhones();
-                        phonesLoadedFromESP = true;
-                        document.getElementById('syncStatus').textContent = '✅ sincronizado';
-                        document.getElementById('syncStatus').style.color = 'var(--green)';
-                        showToast('✅ Lista de telefones sincronizada com o ESP');
-                    }
-                } catch (e) {
-                    console.error('Erro ao processar lista de telefones:', e);
-                }
-            }
-            else if (topic === TOPIC_PREFIX + "/status/sms") {
-                smsEnabled = (value === "1");
-                updateSmsButtons();
-            }
-            else if (topic === TOPIC_PREFIX + "/status/whats") {
-                whatsEnabled = (value === "1");
-                updateSmsButtons();
-            }
-            else if (topic === TOPIC_PREFIX + "/status/gas") {
-                sensorStatus.gas = (value === "1");
-                updateSensorButton('gas');
-                updateSyncStatus('gas');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/temp") {
-                sensorStatus.temp = (value === "1");
-                updateSensorButton('temp');
-                updateSyncStatus('temp');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/flow") {
-                sensorStatus.flow = (value === "1");
-                updateSensorButton('flow');
-                updateSyncStatus('flow');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/press") {
-                sensorStatus.press = (value === "1");
-                updateSensorButton('press');
-                updateSyncStatus('press');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/nivel") {
-                sensorStatus.nivel = (value === "1");
-                updateSensorButton('nivel');
-                updateSyncStatus('nivel');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/pres") {
-                sensorStatus.pres = (value === "1");
-                updateSensorButton('pres');
-                updateSyncStatus('pres');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/mute") {
-                isMuted = (value === "1");
-                document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
-            }
-        }
+void reconnect() {
+  while (!client.connected()) {
+    if (client.connect(deviceID)) {
+      char topicPattern[50];
+      snprintf(topicPattern, sizeof(topicPattern), "casa/estacao01/set/#");
+      client.subscribe(topicPattern);
+      snprintf(topicPattern, sizeof(topicPattern), "casa/estacao01/get/#");
+      client.subscribe(topicPattern);
+      
+      Serial.println("✅ MQTT Conectado - Estação 01");
+      
+      client.publish(topicLockdownStatus, lockdownAtivo ? "1" : "0", true);
+      client.publish(topicSmsStatus, smsEnabled ? "1" : "0", true);
+      client.publish(topicWhatsStatus, whatsEnabled ? "1" : "0", true);
+      client.publish(topicGasStatus, gasMonitorado ? "1" : "0", true);
+      client.publish(topicTempStatus, tempMonitorado ? "1" : "0", true);
+      client.publish(topicFlowStatus, flowMonitorado ? "1" : "0", true);
+      client.publish(topicPressStatus, pressMonitorado ? "1" : "0", true);
+      client.publish(topicNivelStatus, nivelMonitorado ? "1" : "0", true);
+      client.publish(topicPresStatus, presencaMonitorada ? "1" : "0", true);
+      client.publish(topicMuteStatus, alarmeSilenciado ? "1" : "0", true);
+      
+      DynamicJsonDocument infoDoc(256);
+      infoDoc["id"] = STATION_ID;
+      infoDoc["name"] = STATION_NAME;
+      infoDoc["version"] = "10.9.3";
+      infoDoc["api"] = "Infobip";
+      String infoStr;
+      serializeJson(infoDoc, infoStr);
+      client.publish(topicStationInfo, infoStr.c_str(), true);
+      
+      DynamicJsonDocument phoneDoc(1024);
+      JsonArray phoneArr = phoneDoc.to<JsonArray>();
+      for (int i = 0; i < phoneCount; i++) phoneArr.add(phones[i]);
+      String phoneJson;
+      serializeJson(phoneArr, phoneJson);
+      char configPhones[50];
+      snprintf(configPhones, sizeof(configPhones), "casa/estacao01/config/phones");
+      client.publish(configPhones, phoneJson.c_str(), true);
+      Serial.printf("📤 Lista de %d telefones publicada na conexão\n", phoneCount);
+    } else {
+      delay(2500);
+    }
+  }
+}
 
-        function updateSensorButton(type) {
-            const btn = document.getElementById(type + 'Tgl');
-            const isActive = sensorStatus[type];
-            if (isActive) {
-                btn.innerText = "ON";
-                btn.className = 'btn-toggle btn-active';
-            } else {
-                btn.innerText = "OFF";
-                btn.className = 'btn-toggle btn-inactive';
-            }
-        }
+void setup() {
+  Serial.begin(115200);
+  delay(800);
+  
+  initTopics();
 
-        function updateSyncStatus(type) {
-            const syncEl = document.getElementById(type + 'Sync');
-            if (syncEl) {
-                syncEl.textContent = '🟢 sincronizado';
-                syncEl.className = 'status-sync synced';
-            }
-        }
+  for (int i = 0; i < 10; i++) phones[i] = "";
+  phoneCount = 0;
 
-        function updateSmsButtons() {
-            const smsBtn = document.getElementById('smsToggle');
-            const whatsBtn = document.getElementById('whatsToggle');
-            const footerBtn = document.getElementById('smsToggleBtn');
-            
-            smsBtn.className = 'toggle-btn ' + (smsEnabled ? 'active-sms' : 'inactive');
-            smsBtn.textContent = smsEnabled ? '📨 SMS' : '📨 SMS OFF';
-            
-            whatsBtn.className = 'toggle-btn ' + (whatsEnabled ? 'active-whats' : 'inactive');
-            whatsBtn.textContent = whatsEnabled ? '💬 WhatsApp' : '💬 WhatsApp OFF';
-            
-            const statusText = smsEnabled ? 'ON' : 'OFF';
-            footerBtn.textContent = `📱 SMS: ${statusText}`;
-            footerBtn.style.borderColor = smsEnabled ? 'var(--cyan)' : '#333';
-            footerBtn.style.color = smsEnabled ? 'var(--cyan)' : '#666';
-        }
+  pinMode(PIN_RELE, OUTPUT);
+  digitalWrite(PIN_RELE, HIGH);
+  pinMode(PIN_BUZZER, OUTPUT);
+  pinMode(PIN_LED_STATUS, OUTPUT);
+  pinMode(PIN_GAS, INPUT);
+  pinMode(PIN_NTC, INPUT);
+  pinMode(PIN_NIVEL, INPUT);
+  pinMode(PIN_FLOW, INPUT_PULLUP);
+  pinMode(PIN_SENSOR_PRESSAO, INPUT);
+  pinMode(PIN_SENSOR_PRESENCA, INPUT);
 
-        function toggleNotification(type) {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
-                return;
-            }
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            
-            if (type === 'sms') {
-                smsEnabled = !smsEnabled;
-                client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
-            } else if (type === 'whats') {
-                whatsEnabled = !whatsEnabled;
-                client.publish(TOPIC_PREFIX + "/set/whats_enable", whatsEnabled ? "1" : "0");
-            }
-            updateSmsButtons();
-            
-            setTimeout(() => { isUserInteracting = false; }, 200);
-        }
+  attachInterrupt(digitalPinToInterrupt(PIN_FLOW), countPulses, RISING);
+  attachInterrupt(digitalPinToInterrupt(PIN_SENSOR_PRESSAO), contarPulsoPressao, RISING);
 
-        function toggleSmsMode() {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
-                return;
-            }
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            
-            smsEnabled = !smsEnabled;
-            client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
-            updateSmsButtons();
-            
-            setTimeout(() => { isUserInteracting = false; }, 200);
-        }
+  loadConfig();
+  loadPhones();
 
-        function updateStationStatus() {
-            const statusLabel = document.getElementById('stationStatusLabel');
-            const stationLed = document.getElementById('stationLed');
-            if (isStationOnline) {
-                statusLabel.className = 'station-status online';
-                statusLabel.textContent = '[🟢 Estação 01 online]';
-                stationLed.classList.add('online');
-            } else {
-                statusLabel.className = 'station-status offline';
-                statusLabel.textContent = '[⏳ aguardando Estação 01]';
-                stationLed.classList.remove('online');
-            }
-        }
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+  client.setBufferSize(1024);
 
-        function updateSensorStatus(sensor) {
-            const statusEl = document.getElementById(sensor + 'Status');
-            const displayEl = document.getElementById(sensor + 'V');
-            const barEl = document.getElementById(sensor + 'B');
-            if (isStationOnline && hasReceivedData[sensor]) {
-                statusEl.className = 'sensor-status online';
-                statusEl.textContent = '🟢';
-                displayEl.classList.remove('waiting');
-                if (barEl) barEl.classList.remove('waiting');
-            } else {
-                statusEl.className = 'sensor-status waiting';
-                statusEl.textContent = '⏳';
-                displayEl.classList.add('waiting');
-                if (barEl) barEl.classList.add('waiting');
-            }
-        }
+  Serial.println("🚀 WellGuard PRO X v10.9.3 - Infobip");
+  Serial.printf("📱 SMS: %s | 💬 WhatsApp: %s\n", smsEnabled ? "ON" : "OFF", whatsEnabled ? "ON" : "OFF");
+  Serial.printf("📱 Telefones salvos: %d\n", phoneCount);
+  for (int i = 0; i < phoneCount; i++) {
+    Serial.printf("  %d: %s\n", i+1, phones[i].c_str());
+  }
+  
+  if (whatsEnabled && phoneCount > 0) {
+    sendWhatsApp("🚀 WellGuard PRO X v10.9.3 - Infobip iniciada!");
+  }
+}
 
-        function toggleLockdown() {
-            document.getElementById('lockdownModalTitle').textContent = isLockdownActive ? 'DESATIVAR LOCKDOWN' : 'ATIVAR LOCKDOWN';
-            document.getElementById('lockdownDesc').textContent = isLockdownActive
-                ? 'Digite a senha para DESATIVAR o bloqueio total do sistema'
-                : 'Digite a senha para ATIVAR o bloqueio total do sistema';
-            document.getElementById('lockdownModal').style.display = 'flex';
-            document.getElementById('lockdownPassword').value = '';
-            document.getElementById('lockdown_msg').style.display = 'none';
-        }
+void loop() {
+  esp_task_wdt_reset();
+  if (!client.connected()) reconnect();
+  client.loop();
+  controleSirene();
 
-        function confirmLockdown() {
-            const password = document.getElementById('lockdownPassword').value;
-            const correctPassword = "iptu676466";
-            if (password === correctPassword) {
-                isLockdownActive = !isLockdownActive;
-                applyLockdownState();
-                closeLockdownModal();
-                client.publish(TOPIC_PREFIX + "/set/lockdown", isLockdownActive ? "1" : "0");
-            } else {
-                document.getElementById('lockdown_msg').style.display = 'block';
-                document.getElementById('lockdownPassword').value = '';
-                document.getElementById('lockdownPassword').focus();
-            }
-        }
+  if (millis() - lastMillis > 1000) {
+    if (lockdownAtivo) {
+      lastMillis = millis();
+      return;
+    }
 
-        function applyLockdownState() {
-            const btn = document.getElementById('lockdownBtn');
-            const status = document.getElementById('lockdownStatus');
-            const overlay = document.getElementById('lockdownOverlay');
-            const title = document.getElementById('headerTitle');
-            const instruments = document.querySelectorAll('.instrument');
+    int nBruto = analogRead(PIN_NIVEL);
+    nivelF = (nBruto / 4095.0 * 100.0 * alpha) + (nivelF * (1.0 - alpha));
 
-            if (isLockdownActive) {
-                btn.classList.add('active');
-                btn.textContent = '⚡ LOCKDOWN 🔒';
-                status.classList.add('active');
-                status.textContent = '🔒 sistema bloqueado';
-                overlay.classList.add('active');
-                title.classList.add('lockdown-active');
-                title.innerHTML = '🔒 LOCKDOWN ATIVO <span class="station-name">📍 Estação 01</span>';
-                instruments.forEach(inst => inst.classList.add('lockdown'));
-                document.querySelectorAll('.btn-toggle, .footer-btns button').forEach(b => {
-                    b.disabled = true;
-                    b.style.opacity = '0.5';
-                    b.style.cursor = 'not-allowed';
-                });
-            } else {
-                btn.classList.remove('active');
-                btn.textContent = '⚡ LOCKDOWN';
-                status.classList.remove('active');
-                status.textContent = '🔒 sistema seguro';
-                overlay.classList.remove('active');
-                title.classList.remove('lockdown-active');
-                title.innerHTML = 'WELLGUARD PRO X <span class="station-name">📍 Estação 01</span> <span class="station-status offline" id="stationStatusLabel">[⏳ aguardando estação]</span>';
-                instruments.forEach(inst => inst.classList.remove('lockdown'));
-                document.querySelectorAll('.btn-toggle, .footer-btns button').forEach(b => {
-                    b.disabled = false;
-                    b.style.opacity = '1';
-                    b.style.cursor = 'pointer';
-                });
-                updateStationStatus();
-            }
-        }
+    detachInterrupt(digitalPinToInterrupt(PIN_FLOW));
+    float flowLmin = flowPulses / 7.5;
+    flowPulses = 0;
+    attachInterrupt(digitalPinToInterrupt(PIN_FLOW), countPulses, RISING);
 
-        function closeLockdownModal() {
-            document.getElementById('lockdownModal').style.display = 'none';
-        }
+    int gBruto = analogRead(PIN_GAS);
+    int gasReal = max(0, gBruto - baseGas);
+    gasF = (gasReal * alpha) + (gasF * (1.0 - alpha));
 
-        document.addEventListener('DOMContentLoaded', function () {
-            document.getElementById('lockdownPassword').addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') confirmLockdown();
-            });
-            document.getElementById('newPhone').addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') addPhone();
-            });
-        });
+    int tBruto = analogRead(PIN_NTC);
+    float res = 10000.0 * (4095.0 / (tBruto > 0 ? tBruto : 1) - 1.0);
+    float tCelsius = 1.0 / (log(res / 10000.0) / 3950.0 + 1.0 / 298.15) - 273.15;
+    tempF = ((tCelsius + 3.3) * alpha) + (tempF * (1.0 - alpha));
 
-        function initAudio() {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
+    detachInterrupt(digitalPinToInterrupt(PIN_SENSOR_PRESSAO));
+    unsigned int freq = pulsosPressao;
+    pulsosPressao = 0;
+    attachInterrupt(digitalPinToInterrupt(PIN_SENSOR_PRESSAO), contarPulsoPressao, RISING);
+    float pressao_bar = ((45.0 - freq) * (54.0 / 13.0)) / 100.0;
 
-        function toggleFullscreen() {
-            const btn = document.getElementById('fullBtn');
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().then(() => btn.innerHTML = '⤢').catch(console.log);
-            } else {
-                document.exitFullscreen().then(() => btn.innerHTML = '⛶');
-            }
-        }
+    presencaAtual = digitalRead(PIN_SENSOR_PRESENCA);
 
-        document.addEventListener('fullscreenchange', () => {
-            document.getElementById('fullBtn').innerHTML = document.fullscreenElement ? '⤢' : '⛶';
-        });
+    client.publish(topicGas, String((int)gasF).c_str());
+    client.publish(topicTemp, String(tempF, 1).c_str());
+    client.publish(topicFlow, String(flowLmin, 1).c_str());
+    client.publish(topicPressao, String(pressao_bar, 2).c_str());
+    client.publish(topicNivel, String(nivelF, 1).c_str());
+    client.publish(topicPresenca, presencaAtual ? "DETECTADO" : "VAZIO");
 
-        function toggleMute() {
-            if (isLockdownActive) return;
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            
-            isMuted = !isMuted;
-            document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
-            client.publish(TOPIC_PREFIX + "/set/mute", isMuted ? "1" : "0");
-            checkSirenStatus();
-            
-            setTimeout(() => { isUserInteracting = false; }, 200);
-        }
+    bool perigoGas     = (gasF >= spGas && gasMonitorado);
+    bool perigoTemp    = (tempF >= spTemp && tempMonitorado);
+    bool perigoFlow    = (flowLmin >= spFlow && flowMonitorado);
+    bool perigoPress   = (pressao_bar >= spPress && pressMonitorado);
+    bool perigoNivel   = (nivelF >= spNivel && nivelMonitorado);
+    bool perigoPresenca = (presencaAtual && presencaMonitorada);
 
-        function toggleSensor(type) {
-            if (isLockdownActive) return;
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            
-            sensorStatus[type] = !sensorStatus[type];
-            updateSensorButton(type);
-            
-            const alarmDiv = document.getElementById(type + 'A');
-            if (!sensorStatus[type]) {
-                alarmDiv.classList.remove('alarm-on');
-            }
-            
-            const topicMap = {
-                gas: TOPIC_PREFIX + '/set/gas_on',
-                temp: TOPIC_PREFIX + '/set/temp_on',
-                flow: TOPIC_PREFIX + '/set/flow_on',
-                press: TOPIC_PREFIX + '/set/press_on',
-                nivel: TOPIC_PREFIX + '/set/nivel_on',
-                pres: TOPIC_PREFIX + '/set/pres_on'
-            };
-            client.publish(topicMap[type], sensorStatus[type] ? "1" : "0");
-            
-            checkSirenStatus();
-            
-            setTimeout(() => { isUserInteracting = false; }, 200);
-        }
+    perigoAtual = perigoGas || perigoTemp || perigoFlow || perigoPress || perigoNivel || perigoPresenca;
 
-        function checkSirenStatus() {
-            const anyAlarm = document.querySelectorAll('.alarm-on').length > 0;
-            if (!anyAlarm || isMuted) {
-                if (sirenInterval) {
-                    clearInterval(sirenInterval);
-                    sirenInterval = null;
-                }
-            } else {
-                playSiren();
-            }
-        }
+    if (alarmeSilenciado && perigoAtual && (millis() - muteStartTime > MUTE_TIMEOUT)) {
+      alarmeSilenciado = false;
+    }
 
-        function playSiren() {
-            initAudio();
-            if (!sirenInterval && audioCtx) {
-                sirenInterval = setInterval(() => {
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.value = (Math.floor(Date.now() / 400) % 2 === 0) ? 950 : 650;
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-                    osc.start();
-                    osc.stop(audioCtx.currentTime + 0.4);
-                }, 400);
-            }
-        }
+    if (perigoAtual && !alarmeSilenciado && !ultimoEstadoAlarme) {
+      String alerta = "🚨 ALARME Estação 01: ";
+      if (perigoGas)     alerta += "Gás " + String((int)gasF) + "ppm! ";
+      if (perigoTemp)    alerta += "Temp " + String(tempF, 1) + "°C! ";
+      if (perigoFlow)    alerta += "Vazão " + String(flowLmin, 1) + "L/m! ";
+      if (perigoPress)   alerta += "Pressão " + String(pressao_bar, 2) + "bar! ";
+      if (perigoNivel)   alerta += "Nível " + String(nivelF, 1) + "%! ";
+      if (perigoPresenca) alerta += "Presença detectada! ";
 
-        function renderPhones() {
-            const list = document.getElementById('phoneList');
-            const count = document.getElementById('phoneCount');
-            const warning = document.getElementById('limitWarning');
-            const addBtn = document.getElementById('addPhoneBtn');
-            count.textContent = phones.length;
-            warning.style.display = phones.length >= 10 ? 'block' : 'none';
-            addBtn.disabled = phones.length >= 10;
-            if (phones.length === 0) {
-                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum telefone cadastrado</div>';
-                return;
-            }
-            list.innerHTML = phones.map((phone, index) => `
-                <div class="phone-item">
-                    <span>${phone}</span>
-                    <button class="remove-phone" onclick="removePhone(${index})">✕</button>
-                </div>
-            `).join('');
-        }
+      if (whatsEnabled) sendWhatsApp(alerta);
+      if (smsEnabled && phoneCount > 0) sendSMS(alerta);
+    }
 
-        function addPhone() {
-            if (isLockdownActive) return;
-            const input = document.getElementById('newPhone');
-            let phone = input.value.trim().replace(/\s/g, '').replace(/[\(\)\-]/g, '');
-            if (!phone) { alert('Insira um número de telefone.'); return; }
-            if (phone.startsWith('+55')) phone = phone.substring(3);
-            if (phone.startsWith('55')) phone = phone.substring(2);
-            if (phone.length < 10) {
-                alert('Número inválido! Use: DDD + número (ex: 79981182425)');
-                return;
-            }
-            const fullPhone = '+55' + phone;
-            if (phones.length >= 10) {
-                alert('⚠️ Limite de 10 telefones atingido!');
-                return;
-            }
-            if (phones.includes(fullPhone)) {
-                alert('Este telefone já está cadastrado!');
-                return;
-            }
-            phones.push(fullPhone);
-            renderPhones();
-            input.value = '';
-            input.focus();
-            // Salva no ESP
-            client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
-            showToast('📱 Telefone adicionado e salvo no ESP');
-        }
-
-        function removePhone(index) {
-            if (isLockdownActive) return;
-            if (confirm(`Remover o telefone ${phones[index]}?`)) {
-                phones.splice(index, 1);
-                renderPhones();
-                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
-                showToast('📱 Telefone removido do ESP');
-            }
-        }
-
-        function removeAllPhones() {
-            if (isLockdownActive) return;
-            if (phones.length === 0) { alert('Não há telefones para remover.'); return; }
-            if (confirm('⚠️ Remover TODOS os telefones?')) {
-                phones = [];
-                renderPhones();
-                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
-                showToast('🗑️ Todos os telefones removidos do ESP');
-            }
-        }
-
-        client.on("connect", () => {
-            document.getElementById('webLed').classList.add('online');
-            // Inscreve em todos os tópicos da Estação 01
-            client.subscribe(TOPIC_PREFIX + "/set/#");
-            client.subscribe(TOPIC_PREFIX + "/status/#");
-            client.subscribe(TOPIC_PREFIX + "/config/#");
-            client.subscribe(TOPIC_PREFIX + "/gas/#");
-            client.subscribe(TOPIC_PREFIX + "/temp/#");
-            client.subscribe(TOPIC_PREFIX + "/fluxo/#");
-            client.subscribe(TOPIC_PREFIX + "/pressao/#");
-            client.subscribe(TOPIC_PREFIX + "/nivel/#");
-            client.subscribe(TOPIC_PREFIX + "/presenca/#");
-            client.subscribe(TOPIC_PREFIX + "/info");
-            setTimeout(loadConfigFromESP, 800);
-        });
-
-        client.on("message", (t, m) => {
-            const topic = t.toString();
-            const val = m.toString();
-
-            // Processa configurações e status
-            if (topic.startsWith(TOPIC_PREFIX + "/config/") || topic.startsWith(TOPIC_PREFIX + "/status/")) {
-                applyConfigFromESP(topic, val);
-                return;
-            }
-
-            // Verifica se a estação está online
-            if (topic.startsWith(TOPIC_PREFIX) && !topic.includes("/set/")) {
-                isStationOnline = true;
-                lastStationPing = Date.now();
-                updateStationStatus();
-            }
-
-            if (topic === TOPIC_PREFIX + "/status/lockdown") {
-                isLockdownActive = (val === "1");
-                applyLockdownState();
-                return;
-            }
-
-            if (isLockdownActive) return;
-
-            const num = parseFloat(val);
-
-            if (topic.includes(TOPIC_PREFIX + "/gas/vazamento")) {
-                hasReceivedData.gas = true;
-                updateSensorStatus('gas');
-                const sp = parseInt(document.getElementById('s1').value) || 2000;
-                const zero = parseInt(document.getElementById('s6').value) || 0;
-                const real = Math.max(0, num - zero);
-                document.getElementById('gasV').innerText = real.toString().padStart(4, '0');
-                document.getElementById('gasB').style.width = Math.min((real / sp) * 100, 100) + "%";
-                document.getElementById('gasA').classList.toggle('alarm-on', real >= sp && sensorStatus.gas && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/temp/ambiente")) {
-                hasReceivedData.temp = true;
-                updateSensorStatus('temp');
-                const sp = parseFloat(document.getElementById('s2').value) || 50;
-                document.getElementById('tempV').innerText = num.toFixed(1);
-                document.getElementById('tempB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('tempA').classList.toggle('alarm-on', num >= sp && sensorStatus.temp && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/fluxo/agua")) {
-                hasReceivedData.flow = true;
-                updateSensorStatus('flow');
-                const sp = parseFloat(document.getElementById('s3').value) || 10;
-                document.getElementById('flowV').innerText = num.toFixed(1);
-                document.getElementById('flowB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('flowA').classList.toggle('alarm-on', num >= sp && sensorStatus.flow && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/pressao/agua")) {
-                hasReceivedData.press = true;
-                updateSensorStatus('press');
-                const sp = parseFloat(document.getElementById('s4').value) || 4;
-                document.getElementById('pressV').innerText = num.toFixed(2);
-                document.getElementById('pressB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('pressA').classList.toggle('alarm-on', num >= sp && sensorStatus.press && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/nivel/caixa")) {
-                hasReceivedData.nivel = true;
-                updateSensorStatus('nivel');
-                const sp = parseFloat(document.getElementById('s5').value) || 80;
-                document.getElementById('nivelV').innerText = num.toFixed(1);
-                document.getElementById('nivelB').style.width = Math.min(num, 100) + "%";
-                document.getElementById('nivelA').classList.toggle('alarm-on', num >= sp && sensorStatus.nivel && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/presenca/status")) {
-                hasReceivedData.pres = true;
-                updateSensorStatus('pres');
-                const det = (val === "DETECTADO");
-                document.getElementById('presV').innerText = det ? "ALERT" : "OK";
-                document.getElementById('presV').style.color = det ? "#ff2d55" : "#00f5ff";
-                document.getElementById('presA').classList.toggle('alarm-on', det && sensorStatus.pres && isStationOnline);
-            }
-
-            checkSirenStatus();
-        });
-
-        setInterval(() => {
-            if (isStationOnline && (Date.now() - lastStationPing > STATION_TIMEOUT)) {
-                isStationOnline = false;
-                updateStationStatus();
-                ['gas', 'temp', 'flow', 'press', 'nivel', 'pres'].forEach(s => {
-                    hasReceivedData[s] = false;
-                    updateSensorStatus(s);
-                });
-                document.querySelectorAll('.alarm').forEach(el => el.classList.remove('alarm-on'));
-                checkSirenStatus();
-            }
-        }, 2000);
-
-        function save() {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Desative para salvar.');
-                return;
-            }
-            const configs = {
-                s1: document.getElementById('s1').value,
-                s2: document.getElementById('s2').value,
-                s3: document.getElementById('s3').value,
-                s4: document.getElementById('s4').value,
-                s5: document.getElementById('s5').value,
-                s6: document.getElementById('s6').value
-            };
-            for (let id in configs) {
-                client.publish(TOPIC_PREFIX + '/set/' + id, configs[id]);
-            }
-            client.publish(TOPIC_PREFIX + '/set/phones', JSON.stringify(phones));
-            client.publish(TOPIC_PREFIX + '/set/sms_enable', smsEnabled ? "1" : "0");
-            client.publish(TOPIC_PREFIX + '/set/whats_enable', whatsEnabled ? "1" : "0");
-            document.getElementById('modal').style.display = 'none';
-            showToast('✅ Configurações salvas no ESP');
-        }
-
-        window.onload = () => {
-            const keys = ['s1', 's2', 's3', 's4', 's5', 's6'];
-            const defaults = [2000, 50, 10, 4, 80, 0];
-            keys.forEach((k, i) => {
-                const saved = localStorage.getItem('wellguard_v10_' + k);
-                document.getElementById(k).value = saved || defaults[i];
-            });
-            renderPhones();
-            applyLockdownState();
-            updateStationStatus();
-            updateSmsButtons();
-            document.getElementById('syncStatus').textContent = '⏳ aguardando ESP...';
-        };
-
-        function generatePDF() {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Não é possível gerar PDF.');
-                return;
-            }
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            doc.setFontSize(16);
-            doc.text("RELATÓRIO WELLGUARD PRO X", 20, 20);
-            doc.setFontSize(11);
-            doc.text(`Estação: 01`, 20, 30);
-            doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 38);
-            doc.text(`SMS: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 46);
-            doc.text(`WhatsApp: ${whatsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 54);
-            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 62);
-            phones.forEach((phone, i) => {
-                doc.text(`${i + 1}. ${phone}`, 20, 72 + (i * 8));
-            });
-            doc.save("Relatorio_WellGuard_Estacao01.pdf");
-        }
-    </script>
-</body>
-</html>
+    ultimoEstadoAlarme = perigoAtual && !alarmeSilenciado;
+    lastMillis = millis();
+  }
+}
