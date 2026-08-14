@@ -361,7 +361,7 @@
             border-radius: 8px;
             padding: 8px;
             margin: 8px 0;
-            max-height: 150px;
+            max-height: 200px;
             overflow-y: auto;
             border: 1px solid #222;
         }
@@ -369,22 +369,67 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 4px 8px;
-            margin: 2px 0;
+            padding: 6px 8px;
+            margin: 3px 0;
             background: #141416;
             border-radius: 4px;
             font-size: 0.75rem;
             color: var(--cyan);
             border-left: 2px solid var(--cyan);
         }
+        .phone-item .phone-number {
+            flex: 1;
+            font-family: 'Courier New', monospace;
+        }
+        .phone-item .phone-status {
+            font-size: 0.55rem;
+            margin-right: 8px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        .phone-item .phone-status.active {
+            color: var(--green);
+            background: rgba(0, 255, 157, 0.1);
+            border: 1px solid var(--green);
+        }
+        .phone-item .phone-status.inactive {
+            color: #666;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #333;
+        }
+        .phone-item .toggle-phone-btn {
+            padding: 4px 12px;
+            border-radius: 4px;
+            border: none;
+            font-size: 0.55rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+            min-width: 70px;
+        }
+        .phone-item .toggle-phone-btn.btn-on {
+            background: var(--green);
+            color: #000;
+        }
+        .phone-item .toggle-phone-btn.btn-off {
+            background: var(--red);
+            color: #fff;
+        }
+        .phone-item .toggle-phone-btn:hover {
+            opacity: 0.8;
+        }
         .phone-item .remove-phone {
             background: var(--red);
             color: #fff;
             border: none;
             border-radius: 4px;
-            padding: 2px 8px;
+            padding: 4px 10px;
             font-size: 0.6rem;
             cursor: pointer;
+            margin-left: 4px;
+        }
+        .phone-item .remove-phone:hover {
+            opacity: 0.8;
         }
         .phone-counter {
             font-size: 0.7rem;
@@ -568,6 +613,9 @@
             .instrument-grid { gap: 5px; padding: 5px; }
             .instrument { padding: 6px; }
             .footer-btns { grid-template-columns: 1fr 1fr; }
+            .phone-item { flex-wrap: wrap; gap: 4px; }
+            .phone-item .phone-number { font-size: 0.65rem; }
+            .phone-item .toggle-phone-btn { font-size: 0.5rem; padding: 3px 8px; min-width: 55px; }
         }
     </style>
 </head>
@@ -753,6 +801,7 @@
         let audioCtx = null, sirenInterval = null, isMuted = false;
         const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
         let phones = [];
+        let phoneEnabled = []; // Status individual de cada número
         let isLockdownActive = false;
         let isStationOnline = false;
         let hasReceivedData = { gas: false, temp: false, flow: false, press: false, nivel: false, pres: false };
@@ -763,7 +812,6 @@
         let isUserInteracting = false;
         let phonesLoadedFromESP = false;
 
-        // Prefixo dos tópicos para Estação 01
         const TOPIC_PREFIX = "casa/estacao01";
         const STATION_ID = "01";
 
@@ -799,6 +847,8 @@
                     const data = JSON.parse(value);
                     if (Array.isArray(data)) {
                         phones = data;
+                        // Inicializa phoneEnabled com true para novos números
+                        phoneEnabled = phones.map(() => true);
                         renderPhones();
                         phonesLoadedFromESP = true;
                         document.getElementById('syncStatus').textContent = '✅ sincronizado';
@@ -807,6 +857,15 @@
                     }
                 } catch (e) {
                     console.error('Erro ao processar lista de telefones:', e);
+                }
+            }
+            // Status individual de cada número
+            else if (topic.startsWith(TOPIC_PREFIX + "/status/phone/")) {
+                let idx = parseInt(topic.split('/').pop());
+                if (!isNaN(idx) && idx >= 0 && idx < phones.length) {
+                    phoneEnabled[idx] = (value === "1");
+                    renderPhones();
+                    console.log(`📱 Número ${idx} ${phoneEnabled[idx] ? 'ATIVADO' : 'DESATIVADO'}`);
                 }
             }
             else if (topic === TOPIC_PREFIX + "/status/sms") {
@@ -921,6 +980,23 @@
             smsEnabled = !smsEnabled;
             client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
             updateSmsButtons();
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
+        }
+
+        // ==================== CONTROLE INDIVIDUAL ====================
+        function togglePhone(index) {
+            if (isLockdownActive) {
+                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
+                return;
+            }
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
+            phoneEnabled[index] = !phoneEnabled[index];
+            renderPhones();
+            
+            client.publish(TOPIC_PREFIX + "/set/phone/" + index + "/enable", phoneEnabled[index] ? "1" : "0");
             
             setTimeout(() => { isUserInteracting = false; }, 200);
         }
@@ -1125,16 +1201,26 @@
             const count = document.getElementById('phoneCount');
             const warning = document.getElementById('limitWarning');
             const addBtn = document.getElementById('addPhoneBtn');
+            
             count.textContent = phones.length;
             warning.style.display = phones.length >= 10 ? 'block' : 'none';
             addBtn.disabled = phones.length >= 10;
+            
             if (phones.length === 0) {
                 list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum telefone cadastrado</div>';
                 return;
             }
+            
             list.innerHTML = phones.map((phone, index) => `
                 <div class="phone-item">
-                    <span>${phone}</span>
+                    <span class="phone-number">${phone}</span>
+                    <span class="phone-status ${phoneEnabled[index] ? 'active' : 'inactive'}">
+                        ${phoneEnabled[index] ? '✅ ATIVO' : '⛔ INATIVO'}
+                    </span>
+                    <button class="toggle-phone-btn ${phoneEnabled[index] ? 'btn-on' : 'btn-off'}" 
+                            onclick="togglePhone(${index})">
+                        ${phoneEnabled[index] ? '🔴 DESATIVAR' : '🟢 ATIVAR'}
+                    </button>
                     <button class="remove-phone" onclick="removePhone(${index})">✕</button>
                 </div>
             `).join('');
@@ -1161,6 +1247,7 @@
                 return;
             }
             phones.push(fullPhone);
+            phoneEnabled.push(true); // Novo número ativado por padrão
             renderPhones();
             input.value = '';
             input.focus();
@@ -1172,6 +1259,7 @@
             if (isLockdownActive) return;
             if (confirm(`Remover o telefone ${phones[index]}?`)) {
                 phones.splice(index, 1);
+                phoneEnabled.splice(index, 1);
                 renderPhones();
                 client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
                 showToast('📱 Telefone removido do ESP');
@@ -1183,6 +1271,7 @@
             if (phones.length === 0) { alert('Não há telefones para remover.'); return; }
             if (confirm('⚠️ Remover TODOS os telefones?')) {
                 phones = [];
+                phoneEnabled = [];
                 renderPhones();
                 client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
                 showToast('🗑️ Todos os telefones removidos do ESP');
@@ -1346,11 +1435,11 @@
             doc.text(`Estação: 01`, 20, 30);
             doc.text(`API SMS: Infobip`, 20, 38);
             doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 46);
-            doc.text(`SMS: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 54);
+            doc.text(`SMS GERAL: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 54);
             doc.text(`WhatsApp: ${whatsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 62);
             doc.text(`Telefones cadastrados: ${phones.length}`, 20, 70);
             phones.forEach((phone, i) => {
-                doc.text(`${i + 1}. ${phone}`, 20, 80 + (i * 8));
+                doc.text(`${i + 1}. ${phone} - ${phoneEnabled[i] ? 'ATIVO' : 'INATIVO'}`, 20, 80 + (i * 8));
             });
             doc.save("Relatorio_WellGuard_Estacao01.pdf");
         }
