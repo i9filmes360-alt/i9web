@@ -134,6 +134,11 @@
         }
         .header h1 .station-status.online { color: var(--green); }
         .header h1 .station-status.offline { color: #666; }
+        .header h1 .manutencao-status {
+            font-size: 0.5rem;
+            color: var(--yellow);
+            font-weight: 300;
+        }
         .led-group { display: flex; gap: 8px; }
         .led-item { font-size: 0.5rem; color: #666; text-align: center; }
         .led {
@@ -300,7 +305,7 @@
             padding: 20px;
             border-radius: 15px;
             width: 90%;
-            max-width: 400px;
+            max-width: 450px;
             border: 1px solid #333;
             max-height: 90vh;
             overflow-y: auto;
@@ -356,7 +361,7 @@
             font-size: 0.7rem;
             color: var(--green);
         }
-        .phone-list {
+        .phone-list, .mac-list {
             background: #0a0a0b;
             border-radius: 8px;
             padding: 8px;
@@ -365,7 +370,7 @@
             overflow-y: auto;
             border: 1px solid #222;
         }
-        .phone-item {
+        .phone-item, .mac-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -373,17 +378,19 @@
             margin: 3px 0;
             background: #141416;
             border-radius: 4px;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: var(--cyan);
             border-left: 2px solid var(--cyan);
+            flex-wrap: wrap;
+            gap: 4px;
         }
-        .phone-item .phone-number {
+        .phone-item .phone-number, .mac-item .mac-address {
             flex: 1;
             font-family: 'Courier New', monospace;
+            font-size: 0.65rem;
         }
         .phone-item .phone-status {
-            font-size: 0.55rem;
-            margin-right: 8px;
+            font-size: 0.5rem;
             padding: 2px 8px;
             border-radius: 10px;
         }
@@ -397,15 +404,14 @@
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid #333;
         }
-        .phone-item .toggle-phone-btn {
-            padding: 4px 12px;
+        .phone-item .toggle-phone-btn, .mac-item .remove-mac-btn {
+            padding: 4px 10px;
             border-radius: 4px;
             border: none;
-            font-size: 0.55rem;
+            font-size: 0.5rem;
             font-weight: 600;
             cursor: pointer;
             transition: 0.3s;
-            min-width: 70px;
         }
         .phone-item .toggle-phone-btn.btn-on {
             background: var(--green);
@@ -415,29 +421,36 @@
             background: var(--red);
             color: #fff;
         }
-        .phone-item .toggle-phone-btn:hover {
+        .phone-item .toggle-phone-btn:hover, .mac-item .remove-mac-btn:hover {
             opacity: 0.8;
         }
-        .phone-item .remove-phone {
+        .phone-item .remove-phone, .mac-item .remove-mac-btn {
             background: var(--red);
             color: #fff;
             border: none;
             border-radius: 4px;
             padding: 4px 10px;
-            font-size: 0.6rem;
+            font-size: 0.5rem;
             cursor: pointer;
-            margin-left: 4px;
         }
         .phone-item .remove-phone:hover {
             opacity: 0.8;
         }
-        .phone-counter {
+        .mac-item .mac-status {
+            font-size: 0.5rem;
+            color: var(--green);
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(0, 255, 157, 0.1);
+            border: 1px solid var(--green);
+        }
+        .counter {
             font-size: 0.7rem;
             color: #888;
             text-align: right;
             margin-bottom: 4px;
         }
-        .phone-counter span {
+        .counter span {
             color: var(--cyan);
             font-weight: bold;
         }
@@ -451,14 +464,14 @@
             margin: 5px 0;
             display: none;
         }
-        .btn-add-phone {
+        .btn-add {
             background: var(--green);
             color: #000;
             width: 100%;
             margin-top: 5px;
             font-weight: 700;
         }
-        .btn-add-phone:disabled {
+        .btn-add:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
@@ -468,7 +481,7 @@
             width: 100%;
             margin-top: 5px;
         }
-        .phone-input-wrapper {
+        .input-wrapper {
             display: flex;
             align-items: center;
             gap: 5px;
@@ -478,14 +491,14 @@
             padding: 0 5px;
             margin-bottom: 8px;
         }
-        .phone-input-wrapper .prefix {
+        .input-wrapper .prefix {
             color: var(--green);
             font-weight: bold;
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             padding: 8px 0;
             white-space: nowrap;
         }
-        .phone-input-wrapper input {
+        .input-wrapper input {
             border: none;
             padding: 8px 5px;
             margin: 0;
@@ -606,6 +619,18 @@
             85% { opacity: 1; transform: translateX(-50%) translateY(0); }
             100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
         }
+        .info-box {
+            background: rgba(0, 245, 255, 0.05);
+            border: 1px solid rgba(0, 245, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin: 8px 0;
+            font-size: 0.6rem;
+            color: #888;
+        }
+        .info-box .highlight {
+            color: var(--cyan);
+        }
         @media (max-width: 600px) {
             .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
             .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
@@ -613,9 +638,9 @@
             .instrument-grid { gap: 5px; padding: 5px; }
             .instrument { padding: 6px; }
             .footer-btns { grid-template-columns: 1fr 1fr; }
-            .phone-item { flex-wrap: wrap; gap: 4px; }
-            .phone-item .phone-number { font-size: 0.65rem; }
-            .phone-item .toggle-phone-btn { font-size: 0.5rem; padding: 3px 8px; min-width: 55px; }
+            .phone-item, .mac-item { flex-wrap: wrap; gap: 4px; }
+            .phone-item .phone-number, .mac-item .mac-address { font-size: 0.6rem; }
+            .phone-item .toggle-phone-btn { font-size: 0.45rem; padding: 3px 8px; min-width: 55px; }
         }
     </style>
 </head>
@@ -725,6 +750,16 @@
                 CONFIGURAÇÕES - Estação 01
                 <span style="display:block; font-size:0.55rem; color:#666; margin-top:2px;">ID: 01</span>
             </h3>
+            
+            <div style="margin-bottom:10px;">
+                <label style="color:var(--yellow);">📡 MODO MANUTENÇÃO</label>
+                <div class="info-box">
+                    <span class="highlight">🔧</span> Técnicos autorizados por Bluetooth ativam o modo manutenção automaticamente ao se aproximarem.
+                </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid #222; margin:10px 0;">
+            
             <label>SP GÁS</label><input type="number" id="s1">
             <label>SP TEMP</label><input type="number" id="s2">
             <label>SP VAZÃO</label><input type="number" id="s3">
@@ -749,29 +784,46 @@
                 </div>
             </div>
 
-            <!-- STATUS DA API SMS - INFOBIP -->
+            <!-- STATUS DA API SMS -->
             <div style="margin-bottom:10px;">
                 <label style="color:var(--green);">📡 STATUS DA API SMS</label>
                 <div class="api-status">
-                    <span class="status-label">
-                        <span class="flag">🌐</span> Infobip
-                    </span>
+                    <span class="status-label"><span class="flag">🌐</span> Infobip</span>
                     <div class="status-indicator">
                         <span class="status-dot"></span>
-                        <span class="status-text">
-                            ✅ Configurada no ESP
-                            <span style="display:inline-block; background:rgba(0,245,255,0.1); border:1px solid var(--cyan); border-radius:4px; padding:1px 6px; font-size:0.5rem; margin-left:4px;">💳 Créditos</span>
-                        </span>
+                        <span class="status-text">✅ Configurada no ESP</span>
                     </div>
-                </div>
-                <div style="font-size:0.55rem; color:#666; text-align:center; margin-top:4px;">
-                    Credenciais ficam apenas no ESP • Mais seguro
                 </div>
             </div>
 
+            <!-- SEÇÃO: TÉCNICOS AUTORIZADOS (MAC ADDRESS) -->
+            <div style="border-top:1px solid #222; padding-top:10px; margin-top:10px;">
+                <label style="color:var(--yellow);">🔧 TÉCNICOS AUTORIZADOS (MAC Bluetooth)</label>
+                <div class="counter">
+                    <span id="macCount">0</span> / 10 MACs cadastrados
+                    <span style="margin-left:10px; font-size:0.55rem; color:#666;">
+                        <span id="macSyncStatus">🔄 carregando...</span>
+                    </span>
+                </div>
+                <div id="limitMacWarning" class="limit-warning">
+                    ⚠️ LIMITE MÁXIMO DE 10 TÉCNICOS ATINGIDO!
+                </div>
+                <div id="macList" class="mac-list"></div>
+                <div class="input-wrapper">
+                    <span class="prefix">📇</span>
+                    <input type="text" id="newMac" placeholder="Ex: AA:BB:CC:DD:EE:FF" style="text-transform:uppercase;">
+                </div>
+                <div style="display:flex; gap:5px;">
+                    <button onclick="addMac()" id="addMacBtn" class="btn-add" style="flex:1;">➕ ADICIONAR MAC</button>
+                    <button onclick="removeAllMacs()" class="btn-remove-all" style="flex:1;">🗑️ REMOVER TODOS</button>
+                </div>
+                <button onclick="syncMacsFromESP()" style="background:#1f1f22; color:var(--yellow); width:100%; margin-top:5px; border:1px solid #333;">🔄 SINCRONIZAR DO ESP</button>
+            </div>
+
+            <!-- SEÇÃO: TELEFONES -->
             <div style="border-top:1px solid #222; padding-top:10px; margin-top:10px;">
                 <label style="color:var(--green);">📱 TELEFONES CADASTRADOS</label>
-                <div class="phone-counter">
+                <div class="counter">
                     <span id="phoneCount">0</span> / 10 números
                     <span style="margin-left:10px; font-size:0.55rem; color:#666;">
                         <span id="syncStatus">🔄 carregando...</span>
@@ -781,12 +833,12 @@
                     ⚠️ LIMITE MÁXIMO DE 10 TELEFONES ATINGIDO!
                 </div>
                 <div id="phoneList" class="phone-list"></div>
-                <div class="phone-input-wrapper">
+                <div class="input-wrapper">
                     <span class="prefix">+55</span>
                     <input type="text" id="newPhone" placeholder="DDD + Número (ex: 79981182425)">
                 </div>
                 <div style="display:flex; gap:5px;">
-                    <button onclick="addPhone()" id="addPhoneBtn" class="btn-add-phone" style="flex:1;">➕ ADICIONAR</button>
+                    <button onclick="addPhone()" id="addPhoneBtn" class="btn-add" style="flex:1;">➕ ADICIONAR</button>
                     <button onclick="removeAllPhones()" class="btn-remove-all" style="flex:1;">🗑️ REMOVER TODOS</button>
                 </div>
                 <button onclick="syncPhonesFromESP()" style="background:#1f1f22; color:var(--cyan); width:100%; margin-top:5px; border:1px solid #333;">🔄 SINCRONIZAR DO ESP</button>
@@ -801,7 +853,8 @@
         let audioCtx = null, sirenInterval = null, isMuted = false;
         const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
         let phones = [];
-        let phoneEnabled = []; // Status individual de cada número
+        let phoneEnabled = [];
+        let macs = [];
         let isLockdownActive = false;
         let isStationOnline = false;
         let hasReceivedData = { gas: false, temp: false, flow: false, press: false, nivel: false, pres: false };
@@ -811,6 +864,7 @@
         let whatsEnabled = true;
         let isUserInteracting = false;
         let phonesLoadedFromESP = false;
+        let macsLoadedFromESP = false;
 
         const TOPIC_PREFIX = "casa/estacao01";
         const STATION_ID = "01";
@@ -819,19 +873,186 @@
             const toast = document.getElementById('toast');
             toast.textContent = message;
             toast.className = 'toast show';
-            setTimeout(() => {
-                toast.className = 'toast';
-            }, 3000);
+            setTimeout(() => { toast.className = 'toast'; }, 3000);
         }
 
+        // ==================== MACs ====================
+        function syncMacsFromESP() {
+            showToast('🔄 Solicitando lista de MACs do ESP...');
+            client.publish(TOPIC_PREFIX + "/get/macs", "1");
+        }
+
+        function renderMacs() {
+            const list = document.getElementById('macList');
+            const count = document.getElementById('macCount');
+            const warning = document.getElementById('limitMacWarning');
+            const addBtn = document.getElementById('addMacBtn');
+            
+            count.textContent = macs.length;
+            warning.style.display = macs.length >= 10 ? 'block' : 'none';
+            addBtn.disabled = macs.length >= 10;
+            
+            if (macs.length === 0) {
+                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum MAC cadastrado</div>';
+                return;
+            }
+            
+            list.innerHTML = macs.map((mac, index) => `
+                <div class="mac-item">
+                    <span class="mac-address">${mac}</span>
+                    <span class="mac-status">✅ autorizado</span>
+                    <button class="remove-mac-btn" onclick="removeMac(${index})">✕</button>
+                </div>
+            `).join('');
+        }
+
+        function addMac() {
+            if (isLockdownActive) return;
+            const input = document.getElementById('newMac');
+            let mac = input.value.trim().toUpperCase();
+            mac = mac.replace(/[^A-F0-9:]/g, '');
+            
+            if (!mac) { alert('Insira um MAC Address válido (ex: AA:BB:CC:DD:EE:FF)'); return; }
+            if (macs.length >= 10) { alert('⚠️ Limite de 10 MACs atingido!'); return; }
+            if (macs.includes(mac)) { alert('Este MAC já está cadastrado!'); return; }
+            
+            macs.push(mac);
+            renderMacs();
+            input.value = '';
+            input.focus();
+            client.publish(TOPIC_PREFIX + "/set/macs", JSON.stringify(macs));
+            showToast('📇 MAC adicionado e salvo no ESP');
+        }
+
+        function removeMac(index) {
+            if (isLockdownActive) return;
+            if (confirm(`Remover o MAC ${macs[index]}?`)) {
+                macs.splice(index, 1);
+                renderMacs();
+                client.publish(TOPIC_PREFIX + "/set/macs", JSON.stringify(macs));
+                showToast('📇 MAC removido do ESP');
+            }
+        }
+
+        function removeAllMacs() {
+            if (isLockdownActive) return;
+            if (macs.length === 0) { alert('Não há MACs para remover.'); return; }
+            if (confirm('⚠️ Remover TODOS os MACs?')) {
+                macs = [];
+                renderMacs();
+                client.publish(TOPIC_PREFIX + "/set/macs", JSON.stringify(macs));
+                showToast('🗑️ Todos os MACs removidos do ESP');
+            }
+        }
+
+        // ==================== PHONES ====================
         function syncPhonesFromESP() {
             showToast('🔄 Solicitando lista de telefones do ESP...');
             client.publish(TOPIC_PREFIX + "/get/phones", "1");
         }
 
+        function renderPhones() {
+            const list = document.getElementById('phoneList');
+            const count = document.getElementById('phoneCount');
+            const warning = document.getElementById('limitWarning');
+            const addBtn = document.getElementById('addPhoneBtn');
+            
+            count.textContent = phones.length;
+            warning.style.display = phones.length >= 10 ? 'block' : 'none';
+            addBtn.disabled = phones.length >= 10;
+            
+            if (phones.length === 0) {
+                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum telefone cadastrado</div>';
+                return;
+            }
+            
+            list.innerHTML = phones.map((phone, index) => `
+                <div class="phone-item">
+                    <span class="phone-number">${phone}</span>
+                    <span class="phone-status ${phoneEnabled[index] ? 'active' : 'inactive'}">
+                        ${phoneEnabled[index] ? '✅ ATIVO' : '⛔ INATIVO'}
+                    </span>
+                    <button class="toggle-phone-btn ${phoneEnabled[index] ? 'btn-on' : 'btn-off'}" 
+                            onclick="togglePhone(${index})">
+                        ${phoneEnabled[index] ? '🔴 DESATIVAR' : '🟢 ATIVAR'}
+                    </button>
+                    <button class="remove-phone" onclick="removePhone(${index})">✕</button>
+                </div>
+            `).join('');
+        }
+
+        function togglePhone(index) {
+            if (isLockdownActive) {
+                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
+                return;
+            }
+            if (isUserInteracting) return;
+            isUserInteracting = true;
+            
+            phoneEnabled[index] = !phoneEnabled[index];
+            renderPhones();
+            client.publish(TOPIC_PREFIX + "/set/phone/" + index + "/enable", phoneEnabled[index] ? "1" : "0");
+            
+            setTimeout(() => { isUserInteracting = false; }, 200);
+        }
+
+        function addPhone() {
+            if (isLockdownActive) return;
+            const input = document.getElementById('newPhone');
+            let phone = input.value.trim().replace(/\s/g, '').replace(/[\(\)\-]/g, '');
+            if (!phone) { alert('Insira um número de telefone.'); return; }
+            if (phone.startsWith('+55')) phone = phone.substring(3);
+            if (phone.startsWith('55')) phone = phone.substring(2);
+            if (phone.length < 10) {
+                alert('Número inválido! Use: DDD + número (ex: 79981182425)');
+                return;
+            }
+            const fullPhone = '+55' + phone;
+            if (phones.length >= 10) {
+                alert('⚠️ Limite de 10 telefones atingido!');
+                return;
+            }
+            if (phones.includes(fullPhone)) {
+                alert('Este telefone já está cadastrado!');
+                return;
+            }
+            phones.push(fullPhone);
+            phoneEnabled.push(true);
+            renderPhones();
+            input.value = '';
+            input.focus();
+            client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
+            showToast('📱 Telefone adicionado e salvo no ESP');
+        }
+
+        function removePhone(index) {
+            if (isLockdownActive) return;
+            if (confirm(`Remover o telefone ${phones[index]}?`)) {
+                phones.splice(index, 1);
+                phoneEnabled.splice(index, 1);
+                renderPhones();
+                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
+                showToast('📱 Telefone removido do ESP');
+            }
+        }
+
+        function removeAllPhones() {
+            if (isLockdownActive) return;
+            if (phones.length === 0) { alert('Não há telefones para remover.'); return; }
+            if (confirm('⚠️ Remover TODOS os telefones?')) {
+                phones = [];
+                phoneEnabled = [];
+                renderPhones();
+                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
+                showToast('🗑️ Todos os telefones removidos do ESP');
+            }
+        }
+
+        // ==================== CONFIG ====================
         function loadConfigFromESP() {
             client.publish(TOPIC_PREFIX + "/get/config", "1");
             client.publish(TOPIC_PREFIX + "/get/phones", "1");
+            client.publish(TOPIC_PREFIX + "/get/macs", "1");
             client.publish(TOPIC_PREFIX + "/get/lockdown", "1");
         }
 
@@ -847,7 +1068,6 @@
                     const data = JSON.parse(value);
                     if (Array.isArray(data)) {
                         phones = data;
-                        // Inicializa phoneEnabled com true para novos números
                         phoneEnabled = phones.map(() => true);
                         renderPhones();
                         phonesLoadedFromESP = true;
@@ -855,67 +1075,41 @@
                         document.getElementById('syncStatus').style.color = 'var(--green)';
                         showToast('✅ Lista de telefones sincronizada com o ESP');
                     }
-                } catch (e) {
-                    console.error('Erro ao processar lista de telefones:', e);
-                }
+                } catch (e) { console.error(e); }
             }
-            // Status individual de cada número
+            else if (topic === TOPIC_PREFIX + "/status/macs") {
+                try {
+                    const data = JSON.parse(value);
+                    if (Array.isArray(data)) {
+                        macs = data;
+                        renderMacs();
+                        macsLoadedFromESP = true;
+                        document.getElementById('macSyncStatus').textContent = '✅ sincronizado';
+                        document.getElementById('macSyncStatus').style.color = 'var(--green)';
+                    }
+                } catch (e) { console.error(e); }
+            }
             else if (topic.startsWith(TOPIC_PREFIX + "/status/phone/")) {
                 let idx = parseInt(topic.split('/').pop());
                 if (!isNaN(idx) && idx >= 0 && idx < phones.length) {
                     phoneEnabled[idx] = (value === "1");
                     renderPhones();
-                    console.log(`📱 Número ${idx} ${phoneEnabled[idx] ? 'ATIVADO' : 'DESATIVADO'}`);
                 }
             }
-            else if (topic === TOPIC_PREFIX + "/status/sms") {
-                smsEnabled = (value === "1");
-                updateSmsButtons();
-            }
-            else if (topic === TOPIC_PREFIX + "/status/whats") {
-                whatsEnabled = (value === "1");
-                updateSmsButtons();
-            }
-            else if (topic === TOPIC_PREFIX + "/status/gas") {
-                sensorStatus.gas = (value === "1");
-                updateSensorButton('gas');
-                updateSyncStatus('gas');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/temp") {
-                sensorStatus.temp = (value === "1");
-                updateSensorButton('temp');
-                updateSyncStatus('temp');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/flow") {
-                sensorStatus.flow = (value === "1");
-                updateSensorButton('flow');
-                updateSyncStatus('flow');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/press") {
-                sensorStatus.press = (value === "1");
-                updateSensorButton('press');
-                updateSyncStatus('press');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/nivel") {
-                sensorStatus.nivel = (value === "1");
-                updateSensorButton('nivel');
-                updateSyncStatus('nivel');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/pres") {
-                sensorStatus.pres = (value === "1");
-                updateSensorButton('pres');
-                updateSyncStatus('pres');
-            }
-            else if (topic === TOPIC_PREFIX + "/status/mute") {
-                isMuted = (value === "1");
-                document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
-            }
+            else if (topic === TOPIC_PREFIX + "/status/sms") { smsEnabled = (value === "1"); updateSmsButtons(); }
+            else if (topic === TOPIC_PREFIX + "/status/whats") { whatsEnabled = (value === "1"); updateSmsButtons(); }
+            else if (topic === TOPIC_PREFIX + "/status/gas") { sensorStatus.gas = (value === "1"); updateSensorButton('gas'); updateSyncStatus('gas'); }
+            else if (topic === TOPIC_PREFIX + "/status/temp") { sensorStatus.temp = (value === "1"); updateSensorButton('temp'); updateSyncStatus('temp'); }
+            else if (topic === TOPIC_PREFIX + "/status/flow") { sensorStatus.flow = (value === "1"); updateSensorButton('flow'); updateSyncStatus('flow'); }
+            else if (topic === TOPIC_PREFIX + "/status/press") { sensorStatus.press = (value === "1"); updateSensorButton('press'); updateSyncStatus('press'); }
+            else if (topic === TOPIC_PREFIX + "/status/nivel") { sensorStatus.nivel = (value === "1"); updateSensorButton('nivel'); updateSyncStatus('nivel'); }
+            else if (topic === TOPIC_PREFIX + "/status/pres") { sensorStatus.pres = (value === "1"); updateSensorButton('pres'); updateSyncStatus('pres'); }
+            else if (topic === TOPIC_PREFIX + "/status/mute") { isMuted = (value === "1"); document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22'; }
         }
 
         function updateSensorButton(type) {
             const btn = document.getElementById(type + 'Tgl');
-            const isActive = sensorStatus[type];
-            if (isActive) {
+            if (sensorStatus[type]) {
                 btn.innerText = "ON";
                 btn.className = 'btn-toggle btn-active';
             } else {
@@ -926,10 +1120,7 @@
 
         function updateSyncStatus(type) {
             const syncEl = document.getElementById(type + 'Sync');
-            if (syncEl) {
-                syncEl.textContent = '🟢 sincronizado';
-                syncEl.className = 'status-sync synced';
-            }
+            if (syncEl) { syncEl.textContent = '🟢 sincronizado'; syncEl.className = 'status-sync synced'; }
         }
 
         function updateSmsButtons() {
@@ -939,7 +1130,6 @@
             
             smsBtn.className = 'toggle-btn ' + (smsEnabled ? 'active-sms' : 'inactive');
             smsBtn.textContent = smsEnabled ? '📨 SMS' : '📨 SMS OFF';
-            
             whatsBtn.className = 'toggle-btn ' + (whatsEnabled ? 'active-whats' : 'inactive');
             whatsBtn.textContent = whatsEnabled ? '💬 WhatsApp' : '💬 WhatsApp OFF';
             
@@ -950,54 +1140,22 @@
         }
 
         function toggleNotification(type) {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
-                return;
-            }
+            if (isLockdownActive) { alert('🔒 Sistema em LOCKDOWN! Desative para alterar.'); return; }
             if (isUserInteracting) return;
             isUserInteracting = true;
-            
-            if (type === 'sms') {
-                smsEnabled = !smsEnabled;
-                client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
-            } else if (type === 'whats') {
-                whatsEnabled = !whatsEnabled;
-                client.publish(TOPIC_PREFIX + "/set/whats_enable", whatsEnabled ? "1" : "0");
-            }
+            if (type === 'sms') { smsEnabled = !smsEnabled; client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0"); }
+            else if (type === 'whats') { whatsEnabled = !whatsEnabled; client.publish(TOPIC_PREFIX + "/set/whats_enable", whatsEnabled ? "1" : "0"); }
             updateSmsButtons();
-            
             setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
         function toggleSmsMode() {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
-                return;
-            }
+            if (isLockdownActive) { alert('🔒 Sistema em LOCKDOWN! Desative para alterar.'); return; }
             if (isUserInteracting) return;
             isUserInteracting = true;
-            
             smsEnabled = !smsEnabled;
             client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
             updateSmsButtons();
-            
-            setTimeout(() => { isUserInteracting = false; }, 200);
-        }
-
-        // ==================== CONTROLE INDIVIDUAL ====================
-        function togglePhone(index) {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
-                return;
-            }
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            
-            phoneEnabled[index] = !phoneEnabled[index];
-            renderPhones();
-            
-            client.publish(TOPIC_PREFIX + "/set/phone/" + index + "/enable", phoneEnabled[index] ? "1" : "0");
-            
             setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
@@ -1032,6 +1190,7 @@
             }
         }
 
+        // ==================== LOCKDOWN ====================
         function toggleLockdown() {
             document.getElementById('lockdownModalTitle').textContent = isLockdownActive ? 'DESATIVAR LOCKDOWN' : 'ATIVAR LOCKDOWN';
             document.getElementById('lockdownDesc').textContent = isLockdownActive
@@ -1107,6 +1266,9 @@
             document.getElementById('newPhone').addEventListener('keypress', function (e) {
                 if (e.key === 'Enter') addPhone();
             });
+            document.getElementById('newMac').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') addMac();
+            });
         });
 
         function initAudio() {
@@ -1130,12 +1292,10 @@
             if (isLockdownActive) return;
             if (isUserInteracting) return;
             isUserInteracting = true;
-            
             isMuted = !isMuted;
             document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
             client.publish(TOPIC_PREFIX + "/set/mute", isMuted ? "1" : "0");
             checkSirenStatus();
-            
             setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
@@ -1143,15 +1303,10 @@
             if (isLockdownActive) return;
             if (isUserInteracting) return;
             isUserInteracting = true;
-            
             sensorStatus[type] = !sensorStatus[type];
             updateSensorButton(type);
-            
             const alarmDiv = document.getElementById(type + 'A');
-            if (!sensorStatus[type]) {
-                alarmDiv.classList.remove('alarm-on');
-            }
-            
+            if (!sensorStatus[type]) { alarmDiv.classList.remove('alarm-on'); }
             const topicMap = {
                 gas: TOPIC_PREFIX + '/set/gas_on',
                 temp: TOPIC_PREFIX + '/set/temp_on',
@@ -1161,22 +1316,15 @@
                 pres: TOPIC_PREFIX + '/set/pres_on'
             };
             client.publish(topicMap[type], sensorStatus[type] ? "1" : "0");
-            
             checkSirenStatus();
-            
             setTimeout(() => { isUserInteracting = false; }, 200);
         }
 
         function checkSirenStatus() {
             const anyAlarm = document.querySelectorAll('.alarm-on').length > 0;
             if (!anyAlarm || isMuted) {
-                if (sirenInterval) {
-                    clearInterval(sirenInterval);
-                    sirenInterval = null;
-                }
-            } else {
-                playSiren();
-            }
+                if (sirenInterval) { clearInterval(sirenInterval); sirenInterval = null; }
+            } else { playSiren(); }
         }
 
         function playSiren() {
@@ -1196,88 +1344,7 @@
             }
         }
 
-        function renderPhones() {
-            const list = document.getElementById('phoneList');
-            const count = document.getElementById('phoneCount');
-            const warning = document.getElementById('limitWarning');
-            const addBtn = document.getElementById('addPhoneBtn');
-            
-            count.textContent = phones.length;
-            warning.style.display = phones.length >= 10 ? 'block' : 'none';
-            addBtn.disabled = phones.length >= 10;
-            
-            if (phones.length === 0) {
-                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum telefone cadastrado</div>';
-                return;
-            }
-            
-            list.innerHTML = phones.map((phone, index) => `
-                <div class="phone-item">
-                    <span class="phone-number">${phone}</span>
-                    <span class="phone-status ${phoneEnabled[index] ? 'active' : 'inactive'}">
-                        ${phoneEnabled[index] ? '✅ ATIVO' : '⛔ INATIVO'}
-                    </span>
-                    <button class="toggle-phone-btn ${phoneEnabled[index] ? 'btn-on' : 'btn-off'}" 
-                            onclick="togglePhone(${index})">
-                        ${phoneEnabled[index] ? '🔴 DESATIVAR' : '🟢 ATIVAR'}
-                    </button>
-                    <button class="remove-phone" onclick="removePhone(${index})">✕</button>
-                </div>
-            `).join('');
-        }
-
-        function addPhone() {
-            if (isLockdownActive) return;
-            const input = document.getElementById('newPhone');
-            let phone = input.value.trim().replace(/\s/g, '').replace(/[\(\)\-]/g, '');
-            if (!phone) { alert('Insira um número de telefone.'); return; }
-            if (phone.startsWith('+55')) phone = phone.substring(3);
-            if (phone.startsWith('55')) phone = phone.substring(2);
-            if (phone.length < 10) {
-                alert('Número inválido! Use: DDD + número (ex: 79981182425)');
-                return;
-            }
-            const fullPhone = '+55' + phone;
-            if (phones.length >= 10) {
-                alert('⚠️ Limite de 10 telefones atingido!');
-                return;
-            }
-            if (phones.includes(fullPhone)) {
-                alert('Este telefone já está cadastrado!');
-                return;
-            }
-            phones.push(fullPhone);
-            phoneEnabled.push(true); // Novo número ativado por padrão
-            renderPhones();
-            input.value = '';
-            input.focus();
-            client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
-            showToast('📱 Telefone adicionado e salvo no ESP');
-        }
-
-        function removePhone(index) {
-            if (isLockdownActive) return;
-            if (confirm(`Remover o telefone ${phones[index]}?`)) {
-                phones.splice(index, 1);
-                phoneEnabled.splice(index, 1);
-                renderPhones();
-                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
-                showToast('📱 Telefone removido do ESP');
-            }
-        }
-
-        function removeAllPhones() {
-            if (isLockdownActive) return;
-            if (phones.length === 0) { alert('Não há telefones para remover.'); return; }
-            if (confirm('⚠️ Remover TODOS os telefones?')) {
-                phones = [];
-                phoneEnabled = [];
-                renderPhones();
-                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
-                showToast('🗑️ Todos os telefones removidos do ESP');
-            }
-        }
-
+        // ==================== MQTT ====================
         client.on("connect", () => {
             document.getElementById('webLed').classList.add('online');
             client.subscribe(TOPIC_PREFIX + "/set/#");
@@ -1402,6 +1469,7 @@
                 client.publish(TOPIC_PREFIX + '/set/' + id, configs[id]);
             }
             client.publish(TOPIC_PREFIX + '/set/phones', JSON.stringify(phones));
+            client.publish(TOPIC_PREFIX + '/set/macs', JSON.stringify(macs));
             client.publish(TOPIC_PREFIX + '/set/sms_enable', smsEnabled ? "1" : "0");
             client.publish(TOPIC_PREFIX + '/set/whats_enable', whatsEnabled ? "1" : "0");
             document.getElementById('modal').style.display = 'none';
@@ -1416,10 +1484,12 @@
                 document.getElementById(k).value = saved || defaults[i];
             });
             renderPhones();
+            renderMacs();
             applyLockdownState();
             updateStationStatus();
             updateSmsButtons();
             document.getElementById('syncStatus').textContent = '⏳ aguardando ESP...';
+            document.getElementById('macSyncStatus').textContent = '⏳ aguardando ESP...';
         };
 
         function generatePDF() {
@@ -1440,6 +1510,10 @@
             doc.text(`Telefones cadastrados: ${phones.length}`, 20, 70);
             phones.forEach((phone, i) => {
                 doc.text(`${i + 1}. ${phone} - ${phoneEnabled[i] ? 'ATIVO' : 'INATIVO'}`, 20, 80 + (i * 8));
+            });
+            doc.text(`Técnicos autorizados (MAC): ${macs.length}`, 20, 80 + (phones.length * 8) + 10);
+            macs.forEach((mac, i) => {
+                doc.text(`${i + 1}. ${mac}`, 20, 80 + (phones.length * 8) + 20 + (i * 8));
             });
             doc.save("Relatorio_WellGuard_Estacao01.pdf");
         }
