@@ -2,1521 +2,2929 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WellGuard PRO X - Estação 01</title>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa 3D - Controle de Gado com GPS Real</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        :root {
-            --bg: #0a0a0b;
-            --card: #141416;
-            --vis-bg: #080808;
-            --cyan: #00f5ff;
-            --purple: #8b00ff;
-            --red: #ff2d55;
-            --green: #00ff9d;
-            --yellow: #ffcc00;
-            --btn-gray: #1f1f22;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+            background: radial-gradient(circle at 20% 30%, #1a1a2e, #0f0f1a);
+            color: #e0e0e0;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: #ddd;
-            padding: 5px;
+
+        .app {
             display: flex;
-            justify-content: center;
-            min-height: 100vh;
+            height: 100vh;
+            width: 100vw;
+            padding: 12px;
+            gap: 12px;
         }
-        .container {
-            width: 100%;
-            max-width: 1000px;
-            background: var(--card);
-            border-radius: 15px;
-            border: 1px solid #222;
+
+        .sidebar {
+            width: 340px;
+            min-width: 340px;
+            background: linear-gradient(145deg, #1e1e2e, #16161f);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.06);
+            padding: 18px;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
-            position: relative;
-            min-height: 100vh;
+            gap: 14px;
         }
-        .lockdown-overlay {
-            display: none;
-            position: absolute;
-            inset: 0;
-            background: rgba(255, 0, 0, 0.10);
-            border-radius: 15px;
-            z-index: 999;
-            pointer-events: none;
-            animation: pulseOverlay 2s infinite;
-        }
-        .lockdown-overlay.active { display: block; }
-        @keyframes pulseOverlay {
-            0%, 100% { background: rgba(255, 0, 0, 0.08); }
-            50% { background: rgba(255, 0, 0, 0.20); }
-        }
-        .lockdown-watermark {
-            position: fixed;
-            bottom: 15px;
-            left: 15px;
-            z-index: 1000;
-            background: transparent;
-            border: none;
-            color: rgba(255, 255, 255, 0.08);
-            font-size: 0.55rem;
-            font-weight: 300;
-            letter-spacing: 2px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            user-select: none;
-        }
-        .lockdown-watermark:hover {
-            color: rgba(255, 255, 255, 0.25);
-            background: rgba(255, 255, 255, 0.03);
-        }
-        .lockdown-watermark.active {
-            color: rgba(255, 0, 0, 0.40);
-            animation: watermarkPulse 1.5s infinite;
-        }
-        .lockdown-watermark.active:hover { color: rgba(255, 0, 0, 0.70); }
-        @keyframes watermarkPulse {
-            0%, 100% { color: rgba(255, 0, 0, 0.30); }
-            50% { color: rgba(255, 0, 0, 0.50); }
-        }
-        .lockdown-status {
-            position: fixed;
-            bottom: 50px;
-            left: 15px;
-            font-size: 0.5rem;
-            color: rgba(255, 255, 255, 0.08);
-            font-family: 'Courier New', monospace;
-            letter-spacing: 1px;
-            transition: all 0.3s ease;
-            pointer-events: none;
-        }
-        .lockdown-status.active { color: rgba(255, 0, 0, 0.30); }
-        .header {
-            background: #0d0d0f;
-            padding: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #222;
-            flex-wrap: wrap;
-            gap: 5px;
-        }
-        .header h1 {
-            font-size: 0.85rem;
-            color: var(--cyan);
-            letter-spacing: 1px;
-            transition: all 0.3s ease;
-        }
-        .header h1 .station-name {
-            color: var(--green);
-            font-size: 0.7rem;
-            font-weight: 300;
-        }
-        .header h1.lockdown-active {
-            color: var(--red);
-            animation: blinkText 1s infinite;
-        }
-        @keyframes blinkText {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-        .header h1 .station-status {
-            font-size: 0.5rem;
-            color: #666;
-            font-weight: 300;
-        }
-        .header h1 .station-status.online { color: var(--green); }
-        .header h1 .station-status.offline { color: #666; }
-        .header h1 .manutencao-status {
-            font-size: 0.5rem;
-            color: var(--yellow);
-            font-weight: 300;
-        }
-        .led-group { display: flex; gap: 8px; }
-        .led-item { font-size: 0.5rem; color: #666; text-align: center; }
-        .led {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #222;
-            margin: 0 auto 2px;
-        }
-        #webLed.online {
-            background: var(--cyan);
-            box-shadow: 0 0 8px var(--cyan);
-        }
-        #stationLed.online {
-            background: var(--green);
-            box-shadow: 0 0 8px var(--green);
-        }
-        .header-buttons {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .instrument-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            padding: 10px;
-        }
-        .instrument {
-            background: #18181a;
-            border-radius: 12px;
-            padding: 10px;
-            border: 1px solid #252525;
-            transition: 0.3s;
-        }
-        .instrument.lockdown {
-            opacity: 0.3;
-            pointer-events: none;
-            border-color: rgba(255, 0, 0, 0.3);
-        }
-        .instrument .label {
-            font-size: 0.6rem;
-            color: #888;
-            margin-bottom: 5px;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-        .instrument .label .sensor-status {
-            font-size: 0.45rem;
-            font-weight: 300;
-            text-transform: lowercase;
-        }
-        .instrument .label .sensor-status.waiting { color: #666; }
-        .instrument .label .sensor-status.online { color: var(--green); }
-        .visor-interno {
-            background: var(--vis-bg);
-            border-radius: 8px;
-            padding: 5px 10px;
-            border-top: 1px solid #000;
-            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.8);
-        }
-        .display {
-            font-size: 1.6rem;
+
+        .sidebar::-webkit-scrollbar { width: 8px; }
+        .sidebar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
+        .sidebar::-webkit-scrollbar-thumb { background: #424242; border-radius: 4px; }
+
+        .sidebar h1 {
+            font-size: 17px;
             font-weight: 700;
-            font-family: 'Courier New', monospace;
-            color: var(--cyan);
-            text-align: right;
-        }
-        .display.waiting { color: #444; }
-        .bar-wrap {
-            height: 8px;
-            background: #000;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 5px;
-            border: 1px solid #222;
-        }
-        .bar-fill {
-            height: 100%;
-            width: 0%;
-            transition: 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-            background: linear-gradient(90deg, var(--green) 0%, var(--yellow) 50%, var(--red) 100%);
-            box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
-        }
-        .bar-fill.waiting { opacity: 0.1; }
-        .card-controls {
+            background: linear-gradient(135deg, #4fc3f7, #7c4dff, #00e5ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-top: 8px;
+            gap: 8px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
         }
-        .alarm {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: #111;
-            border: 1px solid #000;
-            transition: 0.3s;
+
+        .sidebar h1::before {
+            content: '🐂';
+            font-size: 22px;
+            -webkit-text-fill-color: initial;
         }
-        .alarm-on {
-            background: var(--red);
-            box-shadow: 0 0 12px var(--red);
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse { 50% { opacity: 0.3; } }
-        .footer-btns {
-            padding: 10px;
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
+
+        .section {
+            display: flex;
+            flex-direction: column;
             gap: 8px;
         }
-        button {
-            padding: 10px;
+
+        .section-title {
+            font-size: 11px;
             font-weight: 700;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.65rem;
-            transition: 0.2s;
-        }
-        .btn-secondary {
-            background: var(--btn-gray);
-            color: #bbb;
-            border: 1px solid #2a2a2a;
-        }
-        .btn-toggle {
-            padding: 4px 8px;
-            font-size: 0.55rem;
-            background: #1f1f22;
-            color: #fff;
-            min-width: 45px;
-            border: 1px solid #333;
-            transition: 0.3s;
-            cursor: pointer;
-        }
-        .btn-toggle:hover {
-            opacity: 0.8;
-        }
-        .btn-active {
-            background: var(--cyan);
-            color: #000;
-            border-color: var(--cyan);
-            box-shadow: 0 0 8px rgba(0, 245, 255, 0.3);
-        }
-        .btn-inactive {
-            background: #2a2a2a;
-            color: #666;
-            border-color: #444;
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 1001;
+            color: #78909c;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            display: flex;
             align-items: center;
-            justify-content: center;
-            overflow-y: auto;
-            padding: 10px;
+            gap: 6px;
         }
-        .modal-content {
-            background: #141416;
-            padding: 20px;
-            border-radius: 15px;
-            width: 90%;
-            max-width: 450px;
-            border: 1px solid #333;
-            max-height: 90vh;
-            overflow-y: auto;
+
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(to right, rgba(255,255,255,0.1), transparent);
         }
-        input {
+
+        input[type="text"],
+        input[type="number"] {
             width: 100%;
-            padding: 8px;
-            background: #080808;
-            border: 1px solid #2a2a2a;
-            color: var(--cyan);
-            margin-bottom: 8px;
-            border-radius: 5px;
+            padding: 10px 14px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 9px;
+            font-size: 13px;
+            background: #252535;
+            color: #e0e0e0;
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
             outline: none;
-            font-size: 0.8rem;
+            font-family: inherit;
+            transition: all 0.25s ease;
         }
-        .modal label {
-            font-size: 0.65rem;
-            color: #888;
+
+        input:focus {
+            border-color: #4fc3f7;
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.4), 0 0 0 3px rgba(79, 195, 247, 0.15);
+        }
+
+        input::placeholder { color: #555; }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 9px;
+            cursor: pointer;
+            font-size: 13px;
             font-weight: 600;
-            display: block;
-            margin-bottom: 2px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+            text-align: center;
+            width: 100%;
+            color: #fff;
         }
-        .api-status {
-            background: #0a0a0b;
+
+        button:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.12);
+            box-shadow: 0 5px 14px rgba(0,0,0,0.5);
+        }
+
+        button:disabled {
+            background: #2a2a2a !important;
+            color: #555 !important;
+            cursor: not-allowed;
+            transform: none;
+            filter: none;
+        }
+
+        button.cattle-btn { background: linear-gradient(145deg, #8e24aa, #6a1b9a); }
+        button.cattle-btn.active {
+            background: linear-gradient(145deg, #fdd835, #f9a825);
+            color: #1a1a1a;
+            animation: pulseGlow 1.2s infinite;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 3px 8px rgba(0,0,0,0.4), 0 0 15px rgba(253, 216, 53, 0.4); }
+            50% { box-shadow: 0 3px 8px rgba(0,0,0,0.4), 0 0 30px rgba(253, 216, 53, 0.8); }
+        }
+
+        button.fence-btn { background: linear-gradient(145deg, #43a047, #2e7d32); }
+        button.fence-btn.active {
+            background: linear-gradient(145deg, #fdd835, #f9a825);
+            color: #1a1a1a;
+            animation: pulseGlow 1.2s infinite;
+        }
+
+        button.gps-btn {
+            background: linear-gradient(145deg, #0288d1, #01579b);
+            position: relative;
+            overflow: hidden;
+        }
+        button.gps-btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            animation: shine 2s infinite;
+        }
+        @keyframes shine {
+            0% { left: -100%; }
+            50%, 100% { left: 100%; }
+        }
+
+        button.save-btn { background: linear-gradient(145deg, #00acc1, #00838f); }
+        button.save-map-btn { background: linear-gradient(145deg, #fb8c00, #ef6c00); }
+        button.load-map-btn { background: linear-gradient(145deg, #7e57c2, #5e35b1); }
+        button.cancel-btn { background: linear-gradient(145deg, #ef5350, #c62828); }
+        button.new-batch-btn { background: linear-gradient(145deg, #0288d1, #01579b); }
+        button.apply-btn { background: linear-gradient(145deg, #26a69a, #00796b); margin-top: 4px; }
+        button.test-sound-btn {
+            background: linear-gradient(145deg, #455a64, #263238);
+            font-size: 11px;
+            padding: 8px 12px;
+        }
+        button.reactivate-all-btn {
+            background: linear-gradient(145deg, #fbc02d, #f57f17);
+            color: #1a1a1a;
+            font-size: 12px;
+            padding: 8px 12px;
+        }
+        button.danger { background: linear-gradient(145deg, #e53935, #b71c1c); }
+        button.secondary { background: linear-gradient(145deg, #546e7a, #37474f); }
+
+        .btn-row { display: flex; gap: 6px; }
+        .btn-row button { flex: 1; }
+
+        .status-box {
+            margin-top: auto;
+            font-size: 11px;
+            color: #90a4ae;
+            padding: 10px 12px;
+            background: #1a1a28;
             border-radius: 8px;
-            padding: 10px;
-            margin: 8px 0;
-            border: 1px solid #222;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .api-status .status-label {
-            font-size: 0.65rem;
-            color: #888;
-        }
-        .api-status .status-label .flag {
-            margin-right: 4px;
-        }
-        .api-status .status-indicator {
+            border: 1px solid rgba(255,255,255,0.06);
+            line-height: 1.4;
+            min-height: 42px;
             display: flex;
             align-items: center;
-            gap: 8px;
         }
-        .api-status .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--green);
-            box-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
+
+        .status-box.ws-connected {
+            background: rgba(67, 160, 71, 0.15);
+            border-color: rgba(67, 160, 71, 0.4);
+            color: #66bb6a;
         }
-        .api-status .status-text {
-            font-size: 0.7rem;
-            color: var(--green);
+        .status-box.ws-error {
+            background: rgba(239, 83, 80, 0.15);
+            border-color: rgba(239, 83, 80, 0.4);
+            color: #ef5350;
         }
-        .phone-list, .mac-list {
-            background: #0a0a0b;
-            border-radius: 8px;
-            padding: 8px;
-            margin: 8px 0;
-            max-height: 200px;
-            overflow-y: auto;
-            border: 1px solid #222;
-        }
-        .phone-item, .mac-item {
+
+        .config-row-three {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 8px;
-            margin: 3px 0;
-            background: #141416;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            color: var(--cyan);
-            border-left: 2px solid var(--cyan);
-            flex-wrap: wrap;
+            gap: 6px;
+            align-items: stretch;
+        }
+
+        .config-field {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
             gap: 4px;
         }
-        .phone-item .phone-number, .mac-item .mac-address {
-            flex: 1;
-            font-family: 'Courier New', monospace;
-            font-size: 0.65rem;
+
+        .config-label {
+            font-size: 10px;
+            color: #78909c;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
         }
-        .phone-item .phone-status {
-            font-size: 0.5rem;
-            padding: 2px 8px;
+
+        .input-with-unit {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .input-with-unit input { padding-right: 40px; }
+        .input-with-unit .unit {
+            position: absolute;
+            right: 12px;
+            font-size: 12px;
+            color: #4fc3f7;
+            font-weight: 700;
+            pointer-events: none;
+        }
+
+        .config-hint {
+            font-size: 10px;
+            color: #546e7a;
+            font-style: italic;
+            line-height: 1.3;
+        }
+
+        .config-card {
+            background: linear-gradient(145deg, #1a1a28, #12121c);
+            border: 1px solid rgba(79, 195, 247, 0.15);
             border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
-        .phone-item .phone-status.active {
-            color: var(--green);
-            background: rgba(0, 255, 157, 0.1);
-            border: 1px solid var(--green);
+
+        .config-card .current-values {
+            display: flex;
+            gap: 6px;
+            font-size: 10px;
+            color: #90a4ae;
+            font-family: 'Courier New', monospace;
+            flex-wrap: wrap;
         }
-        .phone-item .phone-status.inactive {
-            color: #666;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid #333;
+
+        .config-card .current-values span {
+            background: rgba(79, 195, 247, 0.1);
+            padding: 3px 8px;
+            border-radius: 5px;
+            border: 1px solid rgba(79, 195, 247, 0.2);
         }
-        .phone-item .toggle-phone-btn, .mac-item .remove-mac-btn {
-            padding: 4px 10px;
-            border-radius: 4px;
-            border: none;
-            font-size: 0.5rem;
+
+        .config-card .current-values span strong { color: #4fc3f7; }
+
+        .sound-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            background: rgba(0,0,0,0.25);
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .sound-toggle-row label {
+            font-size: 12px;
+            color: #b0bec5;
             font-weight: 600;
             cursor: pointer;
-            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        .phone-item .toggle-phone-btn.btn-on {
-            background: var(--green);
-            color: #000;
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 22px;
+            flex-shrink: 0;
         }
-        .phone-item .toggle-phone-btn.btn-off {
-            background: var(--red);
-            color: #fff;
-        }
-        .phone-item .toggle-phone-btn:hover, .mac-item .remove-mac-btn:hover {
-            opacity: 0.8;
-        }
-        .phone-item .remove-phone, .mac-item .remove-mac-btn {
-            background: var(--red);
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            padding: 4px 10px;
-            font-size: 0.5rem;
+
+        .switch input { opacity: 0; width: 0; height: 0; }
+
+        .switch .slider {
+            position: absolute;
             cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #424242;
+            transition: .3s;
+            border-radius: 22px;
         }
-        .phone-item .remove-phone:hover {
-            opacity: 0.8;
+
+        .switch .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
         }
-        .mac-item .mac-status {
-            font-size: 0.5rem;
-            color: var(--green);
-            padding: 2px 8px;
+
+        .switch input:checked + .slider {
+            background: linear-gradient(145deg, #26a69a, #00796b);
+        }
+        .switch input:checked + .slider:before { transform: translateX(18px); }
+
+        .map-area {
+            flex: 1;
+            position: relative;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+            border: 2px solid rgba(79, 195, 247, 0.2);
+        }
+
+        #map { height: 100%; width: 100%; }
+        #map.drawing-mode { cursor: crosshair !important; }
+        #map.placing-cattle { cursor: crosshair !important; }
+
+        .info {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            right: 250px;
+            padding: 12px 18px;
+            background: rgba(26, 35, 126, 0.95);
             border-radius: 10px;
-            background: rgba(0, 255, 157, 0.1);
-            border: 1px solid var(--green);
+            border-left: 4px solid #4fc3f7;
+            color: #e0e0e0;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+            font-size: 13px;
+            line-height: 1.4;
+            z-index: 800;
+            backdrop-filter: blur(8px);
+            pointer-events: none;
         }
-        .counter {
-            font-size: 0.7rem;
-            color: #888;
-            text-align: right;
-            margin-bottom: 4px;
+
+        .info.warning { background: rgba(62, 39, 35, 0.95); border-left-color: #ffa726; }
+        .info.success { background: rgba(27, 94, 32, 0.95); border-left-color: #66bb6a; }
+        .info.danger { background: rgba(74, 14, 14, 0.95); border-left-color: #ef5350; }
+
+        .cattle-icon { background: transparent !important; border: none !important; }
+
+        .cattle-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            cursor: grab;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.7));
+            transition: filter 0.25s ease;
         }
-        .counter span {
-            color: var(--cyan);
-            font-weight: bold;
+
+        .alarm-status {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.7);
+            z-index: 50;
         }
-        .limit-warning {
-            background: var(--red);
-            color: #fff;
-            padding: 6px;
-            border-radius: 5px;
-            font-size: 0.7rem;
-            text-align: center;
-            margin: 5px 0;
-            display: none;
+
+        .alarm-status.on { background: linear-gradient(145deg, #43a047, #2e7d32); }
+        .alarm-status.off { background: linear-gradient(145deg, #616161, #424242); opacity: 0.75; }
+        .alarm-status.muted { background: linear-gradient(145deg, #78909c, #455a64); }
+
+        /* 🆕 ANTENINHA PEQUENA NO LUGAR DO SATÉLITE GIGANTE */
+        .gps-antenna {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            line-height: 1;
+            border: 1.5px solid #fff;
+            background: linear-gradient(145deg, #0288d1, #01579b);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+            z-index: 51;
+            animation: antennaBlink 1.8s infinite;
+            pointer-events: none;
         }
-        .btn-add {
-            background: var(--green);
-            color: #000;
-            width: 100%;
-            margin-top: 5px;
+
+        /* Haste da antena descendo até o boi */
+        .gps-antenna::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 8px;
+            background: linear-gradient(180deg, #0288d1, transparent);
+        }
+
+        @keyframes antennaBlink {
+            0%, 100% {
+                box-shadow: 0 2px 6px rgba(0,0,0,0.6), 0 0 0 0 rgba(2, 136, 209, 0.6);
+                transform: translateX(-50%) scale(1);
+            }
+            50% {
+                box-shadow: 0 2px 6px rgba(0,0,0,0.6), 0 0 0 6px rgba(2, 136, 209, 0);
+                transform: translateX(-50%) scale(1.08);
+            }
+        }
+
+        .cattle-emoji {
+            font-size: 30px;
+            line-height: 1;
+            filter: drop-shadow(0 3px 5px rgba(0,0,0,0.8));
+        }
+
+        .cattle-label {
+            background: linear-gradient(145deg, #6d4c41, #4e342e);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 7px;
+            font-size: 11px;
             font-weight: 700;
-        }
-        .btn-add:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .btn-remove-all {
-            background: var(--red);
-            color: #fff;
-            width: 100%;
-            margin-top: 5px;
-        }
-        .input-wrapper {
+            margin-top: -3px;
+            border: 2px solid rgba(255,255,255,0.9);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.6);
+            white-space: nowrap;
             display: flex;
             align-items: center;
             gap: 5px;
-            background: #080808;
-            border: 1px solid #2a2a2a;
+        }
+
+        .ld-indicator {
+            font-size: 9px;
+            font-weight: 800;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+        .ld-indicator.localizado { background: #2ecc71; color: white; }
+        .ld-indicator.distante { background: #e74c3c; color: white; }
+
+        .cattle-coords {
+            background: rgba(0,0,0,0.95);
+            color: #00ff88;
+            padding: 3px 8px;
             border-radius: 5px;
-            padding: 0 5px;
-            margin-bottom: 8px;
+            font-size: 9px;
+            font-family: 'Courier New', monospace;
+            margin-top: 3px;
+            display: none;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.8);
+            border: 1px solid rgba(0, 255, 136, 0.2);
         }
-        .input-wrapper .prefix {
-            color: var(--green);
-            font-weight: bold;
-            font-size: 0.7rem;
-            padding: 8px 0;
+        .cattle-coords.visible { display: block; }
+
+        .distance-bubble {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translate(-50%, -8px) scale(0.5);
+            background: linear-gradient(145deg, #ffffff, #e8e8e8);
+            color: #1a1a1a;
+            padding: 6px 12px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 800;
+            font-family: 'Comic Sans MS', 'Chalkboard SE', cursive, sans-serif;
             white-space: nowrap;
+            border: 3px solid #1a1a1a;
+            box-shadow: 3px 3px 0 #1a1a1a, 0 6px 16px rgba(0,0,0,0.5);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.25s, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            z-index: 100;
         }
-        .input-wrapper input {
+
+        .distance-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -12px; left: 50%;
+            transform: translateX(-50%);
+            width: 0; height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 12px solid #1a1a1a;
+        }
+
+        .distance-bubble::before {
+            content: '';
+            position: absolute;
+            bottom: -7px; left: 50%;
+            transform: translateX(-50%);
+            width: 0; height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 8px solid #ffffff;
+            z-index: 2;
+        }
+
+        .distance-bubble.visible {
+            opacity: 1;
+            transform: translate(-50%, -8px) scale(1);
+            animation: bubblePop 0.4s ease;
+        }
+
+        @keyframes bubblePop {
+            0% { transform: translate(-50%, -8px) scale(0.5); }
+            60% { transform: translate(-50%, -12px) scale(1.08); }
+            100% { transform: translate(-50%, -8px) scale(1); }
+        }
+
+        .distance-bubble.critical {
+            background: linear-gradient(145deg, #ff5252, #d32f2f);
+            color: #fff;
+        }
+        .distance-bubble.critical::before { border-top-color: #ff5252; }
+
+        .distance-bubble.warning {
+            background: linear-gradient(145deg, #ffb74d, #f57c00);
+            color: #1a1a1a;
+        }
+        .distance-bubble.warning::before { border-top-color: #ffb74d; }
+
+        .distance-bubble.outside {
+            background: linear-gradient(145deg, #5c6bc0, #3949ab);
+            color: #fff;
+        }
+        .distance-bubble.outside::before { border-top-color: #5c6bc0; }
+
+        .distance-bubble.muted {
+            background: linear-gradient(145deg, #78909c, #455a64);
+            color: #fff;
+            opacity: 0.7;
+        }
+        .distance-bubble.muted::before { border-top-color: #78909c; }
+
+        .cattle-wrapper.alert .cattle-emoji {
+            animation: shakeSmall 0.5s infinite;
+            filter: drop-shadow(0 0 10px rgba(255, 0, 0, 0.8));
+        }
+        .cattle-wrapper.alert .cattle-label {
+            background: linear-gradient(145deg, #e74c3c, #c0392b);
+            animation: blinkRed 0.6s infinite;
+        }
+
+        @keyframes shakeSmall {
+            0%, 100% { transform: translateX(0) rotate(0); }
+            25% { transform: translateX(-4px) rotate(-6deg); }
+            75% { transform: translateX(4px) rotate(6deg); }
+        }
+        @keyframes blinkRed {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .fence-delete-icon { background: transparent !important; border: none !important; }
+
+        .fence-delete-btn {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(145deg, #e74c3c, #c0392b);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.9);
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+        }
+
+        .context-menu {
+            position: fixed;
+            z-index: 99999;
+            background: linear-gradient(145deg, #1e1e2e, #16161f);
+            border: 2px solid rgba(79, 195, 247, 0.4);
+            border-radius: 12px;
+            padding: 8px;
+            min-width: 220px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.85);
+            display: none;
+            backdrop-filter: blur(12px);
+        }
+        .context-menu.visible { display: block; }
+
+        .context-menu-header {
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 800;
+            color: #4fc3f7;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .context-menu-header .cattle-name-badge {
+            background: rgba(79, 195, 247, 0.15);
+            padding: 2px 8px;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 11px;
+        }
+
+        .context-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #e0e0e0;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+        }
+
+        .context-menu-item:hover {
+            background: rgba(79, 195, 247, 0.12);
+            border-color: rgba(79, 195, 247, 0.2);
+        }
+
+        .context-menu-item .icon { font-size: 16px; width: 22px; text-align: center; }
+        .context-menu-item.toggle-on { background: rgba(67, 160, 71, 0.15); border-color: rgba(67, 160, 71, 0.4); }
+        .context-menu-item.toggle-off { background: rgba(97, 97, 97, 0.15); border-color: rgba(97, 97, 97, 0.4); }
+        .context-menu-item.danger-item:hover { background: rgba(198, 40, 40, 0.2); border-color: rgba(198, 40, 40, 0.4); }
+        .context-menu-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 6px 4px; }
+        .context-menu-hint {
+            font-size: 10px;
+            color: #78909c;
+            padding: 6px 10px;
+            text-align: center;
+            font-style: italic;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            margin-top: 6px;
+        }
+
+        .cattle-list-panel {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: rgba(30, 30, 46, 0.97);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 14px;
+            z-index: 900;
+            min-width: 240px;
+            max-width: 320px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.7);
+            backdrop-filter: blur(10px);
+        }
+
+        .cattle-list-panel.minimized { padding: 8px 12px; min-width: auto; }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+
+        .cattle-list-panel.minimized .panel-header {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .cattle-list-panel h3 {
+            color: #b39ddb;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .minimize-btn {
+            background: #424242;
+            color: #e0e0e0;
             border: none;
-            padding: 8px 5px;
-            margin: 0;
-            background: transparent;
+            border-radius: 6px;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: bold;
+            box-shadow: none;
+            padding: 0;
+        }
+
+        #cattleListContent { max-height: 400px; overflow-y: auto; }
+        .cattle-list-panel.minimized #cattleListContent { display: none; }
+
+        .cattle-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 7px 10px;
+            background: #2a2a3a;
+            border-radius: 7px;
+            margin-bottom: 6px;
+            font-size: 12px;
+            gap: 4px;
+            border: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .cattle-list-item .name {
+            font-weight: 700;
+            color: #fff;
+            font-size: 11px;
             flex: 1;
         }
-        .lockdown-modal .modal-content {
-            border: 2px solid rgba(255, 0, 0, 0.3);
-            text-align: center;
+
+        .ad-switch {
+            font-size: 9px;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.15);
+            user-select: none;
         }
-        .lockdown-modal .modal-content h2 {
-            color: #ff0000;
-            font-size: 1.2rem;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-        }
-        .lockdown-modal .modal-content .icon {
-            font-size: 3rem;
-            margin: 10px 0;
-        }
-        .btn-lockdown-confirm {
-            background: rgba(255, 0, 0, 0.8);
-            color: #fff;
-            width: 100%;
-            padding: 12px;
-            font-size: 0.9rem;
+        .ad-switch.on { background: linear-gradient(145deg, #43a047, #2e7d32); color: #fff; }
+        .ad-switch.off { background: linear-gradient(145deg, #616161, #424242); color: #b0bec5; }
+
+        .cattle-list-item .dist-badge {
+            font-size: 9px;
+            padding: 2px 5px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
+            color: #90a4ae;
+            font-family: 'Courier New', monospace;
             font-weight: 700;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
         }
-        .btn-lockdown-cancel {
-            background: #333;
+        .cattle-list-item .dist-badge.near { background: #f57c00; color: #fff; }
+        .cattle-list-item .dist-badge.critical { background: #d32f2f; color: #fff; }
+        .cattle-list-item .dist-badge.outside { background: #5c6bc0; color: #fff; }
+        .cattle-list-item .dist-badge.muted-badge { background: #455a64; color: #b0bec5; }
+        .cattle-list-item .dist-badge.gps-badge-list {
+            background: linear-gradient(145deg, #0288d1, #01579b);
             color: #fff;
-            width: 100%;
-            padding: 12px;
-            font-size: 0.9rem;
-            font-weight: 700;
-            border-radius: 8px;
+        }
+
+        .cattle-list-item .remove-cattle {
+            background: linear-gradient(145deg, #c62828, #8e0000);
+            color: white;
             border: none;
+            border-radius: 5px;
+            padding: 3px 8px;
             cursor: pointer;
-            margin-top: 5px;
+            font-size: 11px;
+            font-weight: bold;
+            width: auto;
+            box-shadow: none;
         }
-        #lockdown_msg {
-            color: #ff0000;
-            font-size: 0.8rem;
-            margin: 8px 0;
-            display: none;
-        }
-        .toggle-group {
-            display: flex;
-            gap: 10px;
-            margin: 8px 0;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        .toggle-btn {
-            padding: 6px 16px;
-            border-radius: 20px;
-            border: 2px solid #333;
-            font-size: 0.7rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: 0.3s;
-            background: #1a1a1a;
-            color: #666;
-        }
-        .toggle-btn.active-sms {
-            border-color: var(--cyan);
-            background: rgba(0, 245, 255, 0.15);
-            color: var(--cyan);
-        }
-        .toggle-btn.active-whats {
-            border-color: #25D366;
-            background: rgba(37, 211, 102, 0.15);
-            color: #25D366;
-        }
-        .toggle-btn.inactive {
-            border-color: #333;
-            background: #1a1a1a;
-            color: #444;
-        }
-        .toggle-btn .icon { margin-right: 4px; }
-        .status-sync {
-            font-size: 0.45rem;
-            color: #444;
+
+        .empty-list {
             text-align: center;
-            margin-top: 2px;
-            transition: 0.3s;
+            color: #546e7a;
+            font-size: 11px;
+            font-style: italic;
+            padding: 16px 8px;
         }
-        .status-sync.synced {
-            color: var(--green);
-        }
-        .toast {
-            position: fixed;
-            bottom: 80px;
+
+        #loadMapInput { display: none; }
+
+        .mode-banner {
+            position: absolute;
+            top: 16px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 245, 255, 0.15);
-            border: 1px solid var(--cyan);
-            color: var(--cyan);
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 0.7rem;
-            z-index: 2000;
+            z-index: 850;
+            padding: 10px 20px;
+            background: linear-gradient(145deg, rgba(142, 36, 170, 0.95), rgba(106, 27, 154, 0.95));
+            border: 2px solid rgba(253, 216, 53, 0.6);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
             display: none;
-            backdrop-filter: blur(10px);
-            text-align: center;
-            max-width: 90%;
+            align-items: center;
+            gap: 10px;
+            backdrop-filter: blur(8px);
         }
-        .toast.show {
-            display: block;
-            animation: fadeInOut 3s ease;
+        .mode-banner.visible { display: flex; }
+
+        .mode-banner .batch-info {
+            background: rgba(0,0,0,0.3);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #ffeb3b;
         }
-        @keyframes fadeInOut {
-            0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
-            15% { opacity: 1; transform: translateX(-50%) translateY(0); }
-            85% { opacity: 1; transform: translateX(-50%) translateY(0); }
-            100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+
+        /* ===== MODAL GPS ===== */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 100000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(8px);
+            padding: 20px;
         }
-        .info-box {
-            background: rgba(0, 245, 255, 0.05);
-            border: 1px solid rgba(0, 245, 255, 0.1);
-            border-radius: 8px;
-            padding: 8px 12px;
-            margin: 8px 0;
-            font-size: 0.6rem;
-            color: #888;
+
+        .modal-overlay.visible { display: flex; }
+
+        .modal {
+            background: linear-gradient(145deg, #1e1e2e, #16161f);
+            border: 2px solid rgba(79, 195, 247, 0.3);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 520px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.9);
         }
-        .info-box .highlight {
-            color: var(--cyan);
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
         }
-        @media (max-width: 600px) {
-            .lockdown-watermark { font-size: 0.45rem; bottom: 10px; left: 10px; padding: 5px 8px; }
-            .lockdown-status { font-size: 0.4rem; bottom: 40px; left: 10px; }
-            .display { font-size: 1.2rem; }
-            .instrument-grid { gap: 5px; padding: 5px; }
-            .instrument { padding: 6px; }
-            .footer-btns { grid-template-columns: 1fr 1fr; }
-            .phone-item, .mac-item { flex-wrap: wrap; gap: 4px; }
-            .phone-item .phone-number, .mac-item .mac-address { font-size: 0.6rem; }
-            .phone-item .toggle-phone-btn { font-size: 0.45rem; padding: 3px 8px; min-width: 55px; }
+
+        .modal-header h2 {
+            font-size: 20px;
+            background: linear-gradient(135deg, #4fc3f7, #7c4dff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-close {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #e0e0e0;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 0;
+        }
+
+        .modal-section { margin-bottom: 24px; }
+
+        .modal-section-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #4fc3f7;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 12px;
+        }
+
+        .modal-hint {
+            font-size: 12px;
+            color: #90a4ae;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        .modal-hint strong { color: #4fc3f7; }
+
+        .pairing-code {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .pairing-code .digit {
+            width: 52px;
+            height: 64px;
+            background: linear-gradient(145deg, #252535, #1a1a28);
+            border: 2px solid rgba(79, 195, 247, 0.3);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: 900;
+            color: #4fc3f7;
+            font-family: 'Courier New', monospace;
+            box-shadow: inset 0 4px 8px rgba(0,0,0,0.5), 0 0 20px rgba(79, 195, 247, 0.15);
+            text-shadow: 0 0 15px rgba(79, 195, 247, 0.6);
+        }
+
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            margin: 16px 0;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            min-height: 260px;
+            overflow: hidden;
+        }
+
+        .qr-container canvas,
+        .qr-container img {
+            display: block !important;
+            max-width: 220px !important;
+            max-height: 220px !important;
+            width: 220px !important;
+            height: 220px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .mobile-link {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .mobile-link input {
+            flex: 1;
+            font-size: 12px;
+            padding: 10px 12px;
+            font-family: 'Courier New', monospace;
+            background: #1a1a28;
+        }
+
+        .mobile-link button { width: auto; padding: 10px 16px; font-size: 12px; }
+
+        .pairing-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: rgba(79, 195, 247, 0.08);
+            border: 1px solid rgba(79, 195, 247, 0.2);
+            margin-bottom: 16px;
+        }
+
+        .pairing-status.connected {
+            background: rgba(67, 160, 71, 0.15);
+            border-color: rgba(67, 160, 71, 0.4);
+        }
+
+        .pairing-status.waiting {
+            background: rgba(251, 192, 45, 0.1);
+            border-color: rgba(251, 192, 45, 0.3);
+        }
+
+        .pairing-status .icon { font-size: 24px; }
+        .pairing-status .text { flex: 1; }
+        .pairing-status .title { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 2px; }
+        .pairing-status .subtitle { font-size: 11px; color: #90a4ae; }
+
+        .instructions {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 16px;
+        }
+
+        .instructions ol {
+            margin: 0;
+            padding-left: 20px;
+            color: #b0bec5;
+            font-size: 12px;
+            line-height: 1.8;
+        }
+
+        .instructions li { margin-bottom: 6px; }
+        .instructions li strong { color: #4fc3f7; }
+
+        @media (max-width: 900px) {
+            .app { flex-direction: column; padding: 8px; gap: 8px; }
+            .sidebar { width: 100%; min-width: 0; max-height: 45vh; flex-direction: row; flex-wrap: wrap; }
+            .sidebar h1 { width: 100%; }
+            .section { flex: 1; min-width: 200px; }
+            .status-box { width: 100%; margin-top: 0; }
+            .map-area { flex: 1; }
+            .info { right: 16px; font-size: 12px; }
+            .cattle-list-panel { min-width: 180px; }
         }
     </style>
 </head>
 <body>
-    <div id="toast" class="toast">✅ Lista de telefones sincronizada com o ESP</div>
-    
-    <div class="container" id="mainContainer">
-        <div class="lockdown-overlay" id="lockdownOverlay"></div>
-        <div class="header">
-            <h1 id="headerTitle">
-                WELLGUARD PRO X
-                <span class="station-name">📍 Estação 01</span>
-                <span class="station-status offline" id="stationStatusLabel">[⏳ aguardando estação]</span>
-            </h1>
-            <div class="header-buttons">
-                <div class="led-group">
-                    <div class="led-item"><div id="webLed" class="led"></div>WEB</div>
-                    <div class="led-item"><div id="stationLed" class="led"></div>EST</div>
-                </div>
-                <button id="fullBtn" onclick="toggleFullscreen()" class="btn-secondary" title="Tela Cheia">⛶</button>
-                <button id="muteBtn" onclick="toggleMute()" class="btn-secondary">MUTE</button>
-            </div>
-        </div>
-        <div class="instrument-grid">
-            <div class="instrument" id="instGas">
-                <div class="label">GÁS (PPM) <span class="sensor-status waiting" id="gasStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="gasV">----</div><div class="bar-wrap"><div id="gasB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="gasTgl" onclick="toggleSensor('gas')" class="btn-toggle btn-active">ON</button>
-                    <div id="gasA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="gasSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instTemp">
-                <div class="label">TEMP (°C) <span class="sensor-status waiting" id="tempStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="tempV">--.-</div><div class="bar-wrap"><div id="tempB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="tempTgl" onclick="toggleSensor('temp')" class="btn-toggle btn-active">ON</button>
-                    <div id="tempA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="tempSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instFlow">
-                <div class="label">VAZÃO (L/M) <span class="sensor-status waiting" id="flowStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="flowV">--.-</div><div class="bar-wrap"><div id="flowB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="flowTgl" onclick="toggleSensor('flow')" class="btn-toggle btn-active">ON</button>
-                    <div id="flowA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="flowSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instPress">
-                <div class="label">PRESS (BAR) <span class="sensor-status waiting" id="pressStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="pressV">--.--</div><div class="bar-wrap"><div id="pressB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="pressTgl" onclick="toggleSensor('press')" class="btn-toggle btn-active">ON</button>
-                    <div id="pressA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="pressSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instNivel">
-                <div class="label">NÍVEL (%) <span class="sensor-status waiting" id="nivelStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="nivelV">--.-</div><div class="bar-wrap"><div id="nivelB" class="bar-fill waiting"></div></div></div>
-                <div class="card-controls">
-                    <button id="nivelTgl" onclick="toggleSensor('nivel')" class="btn-toggle btn-active">ON</button>
-                    <div id="nivelA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="nivelSync">🔄 sincronizado</div>
-            </div>
-            <div class="instrument" id="instPres">
-                <div class="label">PRESENÇA <span class="sensor-status waiting" id="presStatus">⏳</span></div>
-                <div class="visor-interno"><div class="display waiting" id="presV" style="text-align:center; font-size:1.1rem;">⏳</div></div>
-                <div class="card-controls">
-                    <button id="presTgl" onclick="toggleSensor('pres')" class="btn-toggle btn-active">ON</button>
-                    <div id="presA" class="alarm"></div>
-                </div>
-                <div class="status-sync" id="presSync">🔄 sincronizado</div>
-            </div>
-        </div>
-        <div class="footer-btns">
-            <button class="btn-secondary" onclick="generatePDF()">📄 PDF</button>
-            <button class="btn-secondary" onclick="document.getElementById('modal').style.display='flex'">⚙️ CONFIG</button>
-            <button id="smsToggleBtn" class="btn-secondary" onclick="toggleSmsMode()">📱 SMS: ON</button>
-        </div>
-    </div>
+    <div class="app">
+        <aside class="sidebar">
+            <h1>Controle de Gado</h1>
 
-    <button id="lockdownBtn" class="lockdown-watermark" onclick="toggleLockdown()">⚡ LOCKDOWN</button>
-    <div id="lockdownStatus" class="lockdown-status">🔒 sistema seguro</div>
+            <div class="section">
+                <div class="section-title">📍 Localização</div>
+                <input type="text" id="cityInput" placeholder="Ex: Goiânia, GO">
+                <button class="secondary" onclick="searchCity()">🔍 Buscar Cidade</button>
+            </div>
 
-    <div id="lockdownModal" class="modal lockdown-modal">
-        <div class="modal-content">
-            <div class="icon">🔒</div>
-            <h2 id="lockdownModalTitle">ATIVAR LOCKDOWN</h2>
-            <p style="color:#888; font-size:0.8rem; margin-bottom:10px;">
-                <span id="lockdownDesc">Digite a senha para ATIVAR o bloqueio total do sistema</span>
-            </p>
-            <input type="password" id="lockdownPassword" placeholder="Digite a senha de segurança" style="text-align:center; font-size:1rem;">
-            <div id="lockdown_msg">Senha incorreta! Tente novamente.</div>
-            <button class="btn-lockdown-confirm" onclick="confirmLockdown()">✓ CONFIRMAR</button>
-            <button class="btn-lockdown-cancel" onclick="closeLockdownModal()">✕ CANCELAR</button>
-        </div>
-    </div>
-
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <h3 style="color:var(--cyan); font-size:0.8rem; margin-bottom:10px; text-align:center;">
-                CONFIGURAÇÕES - Estação 01
-                <span style="display:block; font-size:0.55rem; color:#666; margin-top:2px;">ID: 01</span>
-            </h3>
-            
-            <div style="margin-bottom:10px;">
-                <label style="color:var(--yellow);">📡 MODO MANUTENÇÃO</label>
-                <div class="info-box">
-                    <span class="highlight">🔧</span> Técnicos autorizados por Bluetooth ativam o modo manutenção automaticamente ao se aproximarem.
+            <div class="section">
+                <div class="section-title">📡 Coleira GPS (Celular)</div>
+                <button id="gpsConnectBtn" class="gps-btn" onclick="openGpsModal()">
+                    📡 Conectar Coleira GPS
+                </button>
+                <div class="config-hint" style="text-align: center; margin-top: 4px;">
+                    Use seu celular como coleira real
                 </div>
             </div>
 
-            <hr style="border:0; border-top:1px solid #222; margin:10px 0;">
-            
-            <label>SP GÁS</label><input type="number" id="s1">
-            <label>SP TEMP</label><input type="number" id="s2">
-            <label>SP VAZÃO</label><input type="number" id="s3">
-            <label>SP PRESS</label><input type="number" id="s4" step="0.1">
-            <label>SP NÍVEL</label><input type="number" id="s5">
-            <label>ZERO GÁS</label><input type="number" id="s6">
-            <hr style="border:0; border-top:1px solid #222; margin:10px 0;">
-            
-            <!-- SEÇÃO: CONTROLE DE SMS/WHATSAPP -->
-            <div style="margin-bottom:10px;">
-                <label style="color:var(--cyan);">📱 CONTROLE DE NOTIFICAÇÕES</label>
-                <div class="toggle-group">
-                    <button id="smsToggle" class="toggle-btn active-sms" onclick="toggleNotification('sms')">
-                        <span class="icon">📨</span> SMS
-                    </button>
-                    <button id="whatsToggle" class="toggle-btn active-whats" onclick="toggleNotification('whats')">
-                        <span class="icon">💬</span> WhatsApp
-                    </button>
-                </div>
-                <div style="font-size:0.55rem; color:#666; text-align:center; margin-top:4px;">
-                    Clique para ativar/desativar o envio de alertas
+            <div class="section">
+                <div class="section-title">⚙️ Alerta de Distância</div>
+                <div class="config-card">
+                    <div class="config-row-three">
+                        <div class="config-field">
+                            <span class="config-label">Mín.</span>
+                            <div class="input-with-unit">
+                                <input type="number" id="minDistanceInput" value="10" step="1">
+                                <span class="unit">m</span>
+                            </div>
+                        </div>
+                        <div class="config-field">
+                            <span class="config-label">Crítico</span>
+                            <div class="input-with-unit">
+                                <input type="number" id="criticalDistanceInput" value="3" step="0.5">
+                                <span class="unit">m</span>
+                            </div>
+                        </div>
+                        <div class="config-field">
+                            <span class="config-label">Silenciar</span>
+                            <div class="input-with-unit">
+                                <input type="number" id="muteDistanceInput" value="30" step="1">
+                                <span class="unit">m</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="apply-btn" onclick="applyDistanceConfig()">✔️ Aplicar</button>
+                    <div class="current-values">
+                        <span>📏 ≤ <strong id="currentThreshold">10</strong>m</span>
+                        <span>🔴 ≤ <strong id="currentCritical">3</strong>m</span>
+                        <span>🔇 ≥ <strong id="currentMute">30</strong>m</span>
+                    </div>
+                    <div class="config-hint">💡 <strong>Clique direito</strong> no boi para o menu A/D.</div>
                 </div>
             </div>
 
-            <!-- STATUS DA API SMS -->
-            <div style="margin-bottom:10px;">
-                <label style="color:var(--green);">📡 STATUS DA API SMS</label>
-                <div class="api-status">
-                    <span class="status-label"><span class="flag">🌐</span> Infobip</span>
-                    <div class="status-indicator">
-                        <span class="status-dot"></span>
-                        <span class="status-text">✅ Configurada no ESP</span>
+            <div class="section">
+                <div class="section-title">🔊 Bip de Alerta</div>
+                <div class="config-card">
+                    <div class="sound-toggle-row">
+                        <label for="soundToggle">
+                            <span id="soundIcon">🔊</span>
+                            <span id="soundLabel">Som Ativado</span>
+                        </label>
+                        <div class="switch">
+                            <input type="checkbox" id="soundToggle" checked onchange="toggleSound()">
+                            <span class="slider"></span>
+                        </div>
+                    </div>
+                    <button class="test-sound-btn" onclick="testAlertSound()">🔔 Testar</button>
+                    <button class="reactivate-all-btn" onclick="reactivateAllAlarms()">🔄 Ativar Todos</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">🐂 Coleiras</div>
+                <button id="addCattleBtn" class="cattle-btn" onclick="toggleCattleMode()">➕ Adicionar Coleiras</button>
+                <div class="btn-row" id="cattleActionsRow" style="display: none;">
+                    <button id="newBatchBtn" class="new-batch-btn" onclick="promptNewBatch()">🔄 Novo Lote</button>
+                    <button id="finishCattleBtn" class="save-btn" onclick="finishCattleMode()">✔️ Finalizar</button>
+                </div>
+                <button id="cancelCattleBtn" class="cancel-btn" onclick="cancelCattleMode()" style="display: none;">❌ Cancelar</button>
+            </div>
+
+            <div class="section">
+                <div class="section-title">🔒 Cercas Virtuais</div>
+                <button id="drawFenceBtn" class="fence-btn" onclick="toggleFenceMode()">🖊️ Nova Cerca</button>
+                <div class="btn-row">
+                    <button id="saveFenceBtn" class="save-btn" onclick="saveFence()" disabled style="display: none;">💾 Salvar Cerca</button>
+                    <button id="cancelFenceBtn" class="cancel-btn" onclick="cancelFence()" style="display: none;">❌ Cancelar</button>
+                </div>
+                <button id="removeAllBtn" class="danger" onclick="removeAllFences()" disabled>🗑️ Remover Todas</button>
+            </div>
+
+            <div class="section">
+                <div class="section-title">💾 Arquivo</div>
+                <button class="save-map-btn" id="saveMapBtn" onclick="saveMap()" disabled>💾 Salvar Mapa</button>
+                <button class="load-map-btn" onclick="document.getElementById('loadMapInput').click()">📂 Carregar Mapa</button>
+                <input type="file" id="loadMapInput" accept=".json" onchange="loadMap(event)">
+            </div>
+
+            <div class="status-box" id="toolbarStatus">Pronto</div>
+        </aside>
+
+        <main class="map-area">
+            <div id="map">
+                <div class="cattle-list-panel" id="cattleListPanel">
+                    <div class="panel-header">
+                        <h3>🐂 Coleiras</h3>
+                        <button class="minimize-btn" id="minimizeBtn" onclick="toggleCattlePanel()">−</button>
+                    </div>
+                    <div id="cattleListContent">
+                        <div id="cattleList">
+                            <div class="empty-list">Nenhuma coleira</div>
+                        </div>
                     </div>
                 </div>
+
+                <div class="mode-banner" id="modeBanner">
+                    <span>🐂 Modo Adicionar Coleiras</span>
+                    <span class="batch-info" id="batchInfo">B1, B2, B3</span>
+                </div>
             </div>
 
-            <!-- SEÇÃO: TÉCNICOS AUTORIZADOS (MAC ADDRESS) -->
-            <div style="border-top:1px solid #222; padding-top:10px; margin-top:10px;">
-                <label style="color:var(--yellow);">🔧 TÉCNICOS AUTORIZADOS (MAC Bluetooth)</label>
-                <div class="counter">
-                    <span id="macCount">0</span> / 10 MACs cadastrados
-                    <span style="margin-left:10px; font-size:0.55rem; color:#666;">
-                        <span id="macSyncStatus">🔄 carregando...</span>
-                    </span>
-                </div>
-                <div id="limitMacWarning" class="limit-warning">
-                    ⚠️ LIMITE MÁXIMO DE 10 TÉCNICOS ATINGIDO!
-                </div>
-                <div id="macList" class="mac-list"></div>
-                <div class="input-wrapper">
-                    <span class="prefix">📇</span>
-                    <input type="text" id="newMac" placeholder="Ex: AA:BB:CC:DD:EE:FF" style="text-transform:uppercase;">
-                </div>
-                <div style="display:flex; gap:5px;">
-                    <button onclick="addMac()" id="addMacBtn" class="btn-add" style="flex:1;">➕ ADICIONAR MAC</button>
-                    <button onclick="removeAllMacs()" class="btn-remove-all" style="flex:1;">🗑️ REMOVER TODOS</button>
-                </div>
-                <button onclick="syncMacsFromESP()" style="background:#1f1f22; color:var(--yellow); width:100%; margin-top:5px; border:1px solid #333;">🔄 SINCRONIZAR DO ESP</button>
+            <div class="info" id="info">
+                💡 Clique em <strong>📡 Conectar Coleira GPS</strong> para usar seu celular como rastreador real!
+            </div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="gpsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>📡 Coleira GPS Real</h2>
+                <button class="modal-close" onclick="closeGpsModal()">✕</button>
             </div>
 
-            <!-- SEÇÃO: TELEFONES -->
-            <div style="border-top:1px solid #222; padding-top:10px; margin-top:10px;">
-                <label style="color:var(--green);">📱 TELEFONES CADASTRADOS</label>
-                <div class="counter">
-                    <span id="phoneCount">0</span> / 10 números
-                    <span style="margin-left:10px; font-size:0.55rem; color:#666;">
-                        <span id="syncStatus">🔄 carregando...</span>
-                    </span>
+            <div class="pairing-status waiting" id="pairingStatus">
+                <div class="icon" id="pairingStatusIcon">📱</div>
+                <div class="text">
+                    <div class="title" id="pairingStatusTitle">Aguardando conexão...</div>
+                    <div class="subtitle" id="pairingStatusSubtitle">Abra o link no celular e conecte</div>
                 </div>
-                <div id="limitWarning" class="limit-warning">
-                    ⚠️ LIMITE MÁXIMO DE 10 TELEFONES ATINGIDO!
-                </div>
-                <div id="phoneList" class="phone-list"></div>
-                <div class="input-wrapper">
-                    <span class="prefix">+55</span>
-                    <input type="text" id="newPhone" placeholder="DDD + Número (ex: 79981182425)">
-                </div>
-                <div style="display:flex; gap:5px;">
-                    <button onclick="addPhone()" id="addPhoneBtn" class="btn-add" style="flex:1;">➕ ADICIONAR</button>
-                    <button onclick="removeAllPhones()" class="btn-remove-all" style="flex:1;">🗑️ REMOVER TODOS</button>
-                </div>
-                <button onclick="syncPhonesFromESP()" style="background:#1f1f22; color:var(--cyan); width:100%; margin-top:5px; border:1px solid #333;">🔄 SINCRONIZAR DO ESP</button>
             </div>
-            <button onclick="save()" style="background:var(--cyan); color:#000; width:100%; margin-top:5px;">💾 SALVAR CONFIGURAÇÕES</button>
-            <button onclick="document.getElementById('modal').style.display='none'" style="background:none; color:#888; width:100%; margin-top:5px;">VOLTAR</button>
+
+            <div class="modal-section">
+                <div class="modal-section-title">🔢 Código de Pareamento</div>
+                <div class="modal-hint">
+                    Digite este código na página do celular para autorizar a conexão:
+                </div>
+                <div class="pairing-code" id="pairingCode"></div>
+            </div>
+
+            <div class="modal-section">
+                <div class="modal-section-title">📱 Abrir no Celular</div>
+                <div class="modal-hint">
+                    Aponte a câmera do celular para o QR Code abaixo, <strong>ou</strong> copie o link:
+                </div>
+                <div class="qr-container" id="qrContainer">
+                    <div id="qrRender"></div>
+                </div>
+                <div class="mobile-link">
+                    <input type="text" id="mobileLinkInput" readonly>
+                    <button class="save-btn" onclick="copyMobileLink()">📋 Copiar</button>
+                </div>
+            </div>
+
+            <div class="instructions">
+                <div class="modal-section-title" style="margin-bottom: 8px;">📖 Como usar</div>
+                <ol>
+                    <li>Abra o link no <strong>celular</strong> (mesma rede Wi-Fi ou pelo QR)</li>
+                    <li>Digite o <strong>código de 6 dígitos</strong> mostrado acima</li>
+                    <li>Autorize o acesso ao <strong>GPS</strong> quando pedir</li>
+                    <li>O celular aparecerá como <strong>"CBN"</strong> no mapa</li>
+                    <li>Funciona pelo <strong>Tailscale</strong> em qualquer rede!</li>
+                </ol>
+            </div>
+
+            <div class="modal-section" style="margin-top: 16px;">
+                <button class="danger" onclick="disconnectGps()" id="disconnectBtn" style="display: none;">
+                    🔌 Desconectar Coleira GPS
+                </button>
+            </div>
         </div>
     </div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
     <script>
-        const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
-        let audioCtx = null, sirenInterval = null, isMuted = false;
-        const sensorStatus = { gas: true, temp: true, flow: true, press: true, nivel: true, pres: true };
-        let phones = [];
-        let phoneEnabled = [];
-        let macs = [];
-        let isLockdownActive = false;
-        let isStationOnline = false;
-        let hasReceivedData = { gas: false, temp: false, flow: false, press: false, nivel: false, pres: false };
-        let lastStationPing = 0;
-        const STATION_TIMEOUT = 6000;
-        let smsEnabled = true;
-        let whatsEnabled = true;
-        let isUserInteracting = false;
-        let phonesLoadedFromESP = false;
-        let macsLoadedFromESP = false;
-
-        const TOPIC_PREFIX = "casa/estacao01";
-        const STATION_ID = "01";
-
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = 'toast show';
-            setTimeout(() => { toast.className = 'toast'; }, 3000);
-        }
-
-        // ==================== MACs ====================
-        function syncMacsFromESP() {
-            showToast('🔄 Solicitando lista de MACs do ESP...');
-            client.publish(TOPIC_PREFIX + "/get/macs", "1");
-        }
-
-        function renderMacs() {
-            const list = document.getElementById('macList');
-            const count = document.getElementById('macCount');
-            const warning = document.getElementById('limitMacWarning');
-            const addBtn = document.getElementById('addMacBtn');
-            
-            count.textContent = macs.length;
-            warning.style.display = macs.length >= 10 ? 'block' : 'none';
-            addBtn.disabled = macs.length >= 10;
-            
-            if (macs.length === 0) {
-                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum MAC cadastrado</div>';
-                return;
-            }
-            
-            list.innerHTML = macs.map((mac, index) => `
-                <div class="mac-item">
-                    <span class="mac-address">${mac}</span>
-                    <span class="mac-status">✅ autorizado</span>
-                    <button class="remove-mac-btn" onclick="removeMac(${index})">✕</button>
-                </div>
-            `).join('');
-        }
-
-        function addMac() {
-            if (isLockdownActive) return;
-            const input = document.getElementById('newMac');
-            let mac = input.value.trim().toUpperCase();
-            mac = mac.replace(/[^A-F0-9:]/g, '');
-            
-            if (!mac) { alert('Insira um MAC Address válido (ex: AA:BB:CC:DD:EE:FF)'); return; }
-            if (macs.length >= 10) { alert('⚠️ Limite de 10 MACs atingido!'); return; }
-            if (macs.includes(mac)) { alert('Este MAC já está cadastrado!'); return; }
-            
-            macs.push(mac);
-            renderMacs();
-            input.value = '';
-            input.focus();
-            client.publish(TOPIC_PREFIX + "/set/macs", JSON.stringify(macs));
-            showToast('📇 MAC adicionado e salvo no ESP');
-        }
-
-        function removeMac(index) {
-            if (isLockdownActive) return;
-            if (confirm(`Remover o MAC ${macs[index]}?`)) {
-                macs.splice(index, 1);
-                renderMacs();
-                client.publish(TOPIC_PREFIX + "/set/macs", JSON.stringify(macs));
-                showToast('📇 MAC removido do ESP');
-            }
-        }
-
-        function removeAllMacs() {
-            if (isLockdownActive) return;
-            if (macs.length === 0) { alert('Não há MACs para remover.'); return; }
-            if (confirm('⚠️ Remover TODOS os MACs?')) {
-                macs = [];
-                renderMacs();
-                client.publish(TOPIC_PREFIX + "/set/macs", JSON.stringify(macs));
-                showToast('🗑️ Todos os MACs removidos do ESP');
-            }
-        }
-
-        // ==================== PHONES ====================
-        function syncPhonesFromESP() {
-            showToast('🔄 Solicitando lista de telefones do ESP...');
-            client.publish(TOPIC_PREFIX + "/get/phones", "1");
-        }
-
-        function renderPhones() {
-            const list = document.getElementById('phoneList');
-            const count = document.getElementById('phoneCount');
-            const warning = document.getElementById('limitWarning');
-            const addBtn = document.getElementById('addPhoneBtn');
-            
-            count.textContent = phones.length;
-            warning.style.display = phones.length >= 10 ? 'block' : 'none';
-            addBtn.disabled = phones.length >= 10;
-            
-            if (phones.length === 0) {
-                list.innerHTML = '<div style="color:#666; font-size:0.7rem; text-align:center; padding:10px;">Nenhum telefone cadastrado</div>';
-                return;
-            }
-            
-            list.innerHTML = phones.map((phone, index) => `
-                <div class="phone-item">
-                    <span class="phone-number">${phone}</span>
-                    <span class="phone-status ${phoneEnabled[index] ? 'active' : 'inactive'}">
-                        ${phoneEnabled[index] ? '✅ ATIVO' : '⛔ INATIVO'}
-                    </span>
-                    <button class="toggle-phone-btn ${phoneEnabled[index] ? 'btn-on' : 'btn-off'}" 
-                            onclick="togglePhone(${index})">
-                        ${phoneEnabled[index] ? '🔴 DESATIVAR' : '🟢 ATIVAR'}
-                    </button>
-                    <button class="remove-phone" onclick="removePhone(${index})">✕</button>
-                </div>
-            `).join('');
-        }
-
-        function togglePhone(index) {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Desative para alterar.');
-                return;
-            }
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            
-            phoneEnabled[index] = !phoneEnabled[index];
-            renderPhones();
-            client.publish(TOPIC_PREFIX + "/set/phone/" + index + "/enable", phoneEnabled[index] ? "1" : "0");
-            
-            setTimeout(() => { isUserInteracting = false; }, 200);
-        }
-
-        function addPhone() {
-            if (isLockdownActive) return;
-            const input = document.getElementById('newPhone');
-            let phone = input.value.trim().replace(/\s/g, '').replace(/[\(\)\-]/g, '');
-            if (!phone) { alert('Insira um número de telefone.'); return; }
-            if (phone.startsWith('+55')) phone = phone.substring(3);
-            if (phone.startsWith('55')) phone = phone.substring(2);
-            if (phone.length < 10) {
-                alert('Número inválido! Use: DDD + número (ex: 79981182425)');
-                return;
-            }
-            const fullPhone = '+55' + phone;
-            if (phones.length >= 10) {
-                alert('⚠️ Limite de 10 telefones atingido!');
-                return;
-            }
-            if (phones.includes(fullPhone)) {
-                alert('Este telefone já está cadastrado!');
-                return;
-            }
-            phones.push(fullPhone);
-            phoneEnabled.push(true);
-            renderPhones();
-            input.value = '';
-            input.focus();
-            client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
-            showToast('📱 Telefone adicionado e salvo no ESP');
-        }
-
-        function removePhone(index) {
-            if (isLockdownActive) return;
-            if (confirm(`Remover o telefone ${phones[index]}?`)) {
-                phones.splice(index, 1);
-                phoneEnabled.splice(index, 1);
-                renderPhones();
-                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
-                showToast('📱 Telefone removido do ESP');
-            }
-        }
-
-        function removeAllPhones() {
-            if (isLockdownActive) return;
-            if (phones.length === 0) { alert('Não há telefones para remover.'); return; }
-            if (confirm('⚠️ Remover TODOS os telefones?')) {
-                phones = [];
-                phoneEnabled = [];
-                renderPhones();
-                client.publish(TOPIC_PREFIX + "/set/phones", JSON.stringify(phones));
-                showToast('🗑️ Todos os telefones removidos do ESP');
-            }
-        }
-
-        // ==================== CONFIG ====================
-        function loadConfigFromESP() {
-            client.publish(TOPIC_PREFIX + "/get/config", "1");
-            client.publish(TOPIC_PREFIX + "/get/phones", "1");
-            client.publish(TOPIC_PREFIX + "/get/macs", "1");
-            client.publish(TOPIC_PREFIX + "/get/lockdown", "1");
-        }
-
-        function applyConfigFromESP(topic, value) {
-            if (topic === TOPIC_PREFIX + "/config/s1") document.getElementById('s1').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s2") document.getElementById('s2').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s3") document.getElementById('s3').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s4") document.getElementById('s4').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s5") document.getElementById('s5').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/s6") document.getElementById('s6').value = value;
-            else if (topic === TOPIC_PREFIX + "/config/phones") {
-                try {
-                    const data = JSON.parse(value);
-                    if (Array.isArray(data)) {
-                        phones = data;
-                        phoneEnabled = phones.map(() => true);
-                        renderPhones();
-                        phonesLoadedFromESP = true;
-                        document.getElementById('syncStatus').textContent = '✅ sincronizado';
-                        document.getElementById('syncStatus').style.color = 'var(--green)';
-                        showToast('✅ Lista de telefones sincronizada com o ESP');
-                    }
-                } catch (e) { console.error(e); }
-            }
-            else if (topic === TOPIC_PREFIX + "/status/macs") {
-                try {
-                    const data = JSON.parse(value);
-                    if (Array.isArray(data)) {
-                        macs = data;
-                        renderMacs();
-                        macsLoadedFromESP = true;
-                        document.getElementById('macSyncStatus').textContent = '✅ sincronizado';
-                        document.getElementById('macSyncStatus').style.color = 'var(--green)';
-                    }
-                } catch (e) { console.error(e); }
-            }
-            else if (topic.startsWith(TOPIC_PREFIX + "/status/phone/")) {
-                let idx = parseInt(topic.split('/').pop());
-                if (!isNaN(idx) && idx >= 0 && idx < phones.length) {
-                    phoneEnabled[idx] = (value === "1");
-                    renderPhones();
-                }
-            }
-            else if (topic === TOPIC_PREFIX + "/status/sms") { smsEnabled = (value === "1"); updateSmsButtons(); }
-            else if (topic === TOPIC_PREFIX + "/status/whats") { whatsEnabled = (value === "1"); updateSmsButtons(); }
-            else if (topic === TOPIC_PREFIX + "/status/gas") { sensorStatus.gas = (value === "1"); updateSensorButton('gas'); updateSyncStatus('gas'); }
-            else if (topic === TOPIC_PREFIX + "/status/temp") { sensorStatus.temp = (value === "1"); updateSensorButton('temp'); updateSyncStatus('temp'); }
-            else if (topic === TOPIC_PREFIX + "/status/flow") { sensorStatus.flow = (value === "1"); updateSensorButton('flow'); updateSyncStatus('flow'); }
-            else if (topic === TOPIC_PREFIX + "/status/press") { sensorStatus.press = (value === "1"); updateSensorButton('press'); updateSyncStatus('press'); }
-            else if (topic === TOPIC_PREFIX + "/status/nivel") { sensorStatus.nivel = (value === "1"); updateSensorButton('nivel'); updateSyncStatus('nivel'); }
-            else if (topic === TOPIC_PREFIX + "/status/pres") { sensorStatus.pres = (value === "1"); updateSensorButton('pres'); updateSyncStatus('pres'); }
-            else if (topic === TOPIC_PREFIX + "/status/mute") { isMuted = (value === "1"); document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22'; }
-        }
-
-        function updateSensorButton(type) {
-            const btn = document.getElementById(type + 'Tgl');
-            if (sensorStatus[type]) {
-                btn.innerText = "ON";
-                btn.className = 'btn-toggle btn-active';
+        window.addEventListener('load', function() {
+            if (typeof QRCode === 'undefined') {
+                console.warn('⚠️ qrcodejs não carregou.');
             } else {
-                btn.innerText = "OFF";
-                btn.className = 'btn-toggle btn-inactive';
+                console.log('✅ qrcodejs carregado com sucesso');
             }
-        }
-
-        function updateSyncStatus(type) {
-            const syncEl = document.getElementById(type + 'Sync');
-            if (syncEl) { syncEl.textContent = '🟢 sincronizado'; syncEl.className = 'status-sync synced'; }
-        }
-
-        function updateSmsButtons() {
-            const smsBtn = document.getElementById('smsToggle');
-            const whatsBtn = document.getElementById('whatsToggle');
-            const footerBtn = document.getElementById('smsToggleBtn');
-            
-            smsBtn.className = 'toggle-btn ' + (smsEnabled ? 'active-sms' : 'inactive');
-            smsBtn.textContent = smsEnabled ? '📨 SMS' : '📨 SMS OFF';
-            whatsBtn.className = 'toggle-btn ' + (whatsEnabled ? 'active-whats' : 'inactive');
-            whatsBtn.textContent = whatsEnabled ? '💬 WhatsApp' : '💬 WhatsApp OFF';
-            
-            const statusText = smsEnabled ? 'ON' : 'OFF';
-            footerBtn.textContent = `📱 SMS: ${statusText}`;
-            footerBtn.style.borderColor = smsEnabled ? 'var(--cyan)' : '#333';
-            footerBtn.style.color = smsEnabled ? 'var(--cyan)' : '#666';
-        }
-
-        function toggleNotification(type) {
-            if (isLockdownActive) { alert('🔒 Sistema em LOCKDOWN! Desative para alterar.'); return; }
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            if (type === 'sms') { smsEnabled = !smsEnabled; client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0"); }
-            else if (type === 'whats') { whatsEnabled = !whatsEnabled; client.publish(TOPIC_PREFIX + "/set/whats_enable", whatsEnabled ? "1" : "0"); }
-            updateSmsButtons();
-            setTimeout(() => { isUserInteracting = false; }, 200);
-        }
-
-        function toggleSmsMode() {
-            if (isLockdownActive) { alert('🔒 Sistema em LOCKDOWN! Desative para alterar.'); return; }
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            smsEnabled = !smsEnabled;
-            client.publish(TOPIC_PREFIX + "/set/sms_enable", smsEnabled ? "1" : "0");
-            updateSmsButtons();
-            setTimeout(() => { isUserInteracting = false; }, 200);
-        }
-
-        function updateStationStatus() {
-            const statusLabel = document.getElementById('stationStatusLabel');
-            const stationLed = document.getElementById('stationLed');
-            if (isStationOnline) {
-                statusLabel.className = 'station-status online';
-                statusLabel.textContent = '[🟢 Estação 01 online]';
-                stationLed.classList.add('online');
-            } else {
-                statusLabel.className = 'station-status offline';
-                statusLabel.textContent = '[⏳ aguardando Estação 01]';
-                stationLed.classList.remove('online');
-            }
-        }
-
-        function updateSensorStatus(sensor) {
-            const statusEl = document.getElementById(sensor + 'Status');
-            const displayEl = document.getElementById(sensor + 'V');
-            const barEl = document.getElementById(sensor + 'B');
-            if (isStationOnline && hasReceivedData[sensor]) {
-                statusEl.className = 'sensor-status online';
-                statusEl.textContent = '🟢';
-                displayEl.classList.remove('waiting');
-                if (barEl) barEl.classList.remove('waiting');
-            } else {
-                statusEl.className = 'sensor-status waiting';
-                statusEl.textContent = '⏳';
-                displayEl.classList.add('waiting');
-                if (barEl) barEl.classList.add('waiting');
-            }
-        }
-
-        // ==================== LOCKDOWN ====================
-        function toggleLockdown() {
-            document.getElementById('lockdownModalTitle').textContent = isLockdownActive ? 'DESATIVAR LOCKDOWN' : 'ATIVAR LOCKDOWN';
-            document.getElementById('lockdownDesc').textContent = isLockdownActive
-                ? 'Digite a senha para DESATIVAR o bloqueio total do sistema'
-                : 'Digite a senha para ATIVAR o bloqueio total do sistema';
-            document.getElementById('lockdownModal').style.display = 'flex';
-            document.getElementById('lockdownPassword').value = '';
-            document.getElementById('lockdown_msg').style.display = 'none';
-        }
-
-        function confirmLockdown() {
-            const password = document.getElementById('lockdownPassword').value;
-            const correctPassword = "iptu676466";
-            if (password === correctPassword) {
-                isLockdownActive = !isLockdownActive;
-                applyLockdownState();
-                closeLockdownModal();
-                client.publish(TOPIC_PREFIX + "/set/lockdown", isLockdownActive ? "1" : "0");
-            } else {
-                document.getElementById('lockdown_msg').style.display = 'block';
-                document.getElementById('lockdownPassword').value = '';
-                document.getElementById('lockdownPassword').focus();
-            }
-        }
-
-        function applyLockdownState() {
-            const btn = document.getElementById('lockdownBtn');
-            const status = document.getElementById('lockdownStatus');
-            const overlay = document.getElementById('lockdownOverlay');
-            const title = document.getElementById('headerTitle');
-            const instruments = document.querySelectorAll('.instrument');
-
-            if (isLockdownActive) {
-                btn.classList.add('active');
-                btn.textContent = '⚡ LOCKDOWN 🔒';
-                status.classList.add('active');
-                status.textContent = '🔒 sistema bloqueado';
-                overlay.classList.add('active');
-                title.classList.add('lockdown-active');
-                title.innerHTML = '🔒 LOCKDOWN ATIVO <span class="station-name">📍 Estação 01</span>';
-                instruments.forEach(inst => inst.classList.add('lockdown'));
-                document.querySelectorAll('.btn-toggle, .footer-btns button').forEach(b => {
-                    b.disabled = true;
-                    b.style.opacity = '0.5';
-                    b.style.cursor = 'not-allowed';
-                });
-            } else {
-                btn.classList.remove('active');
-                btn.textContent = '⚡ LOCKDOWN';
-                status.classList.remove('active');
-                status.textContent = '🔒 sistema seguro';
-                overlay.classList.remove('active');
-                title.classList.remove('lockdown-active');
-                title.innerHTML = 'WELLGUARD PRO X <span class="station-name">📍 Estação 01</span> <span class="station-status offline" id="stationStatusLabel">[⏳ aguardando estação]</span>';
-                instruments.forEach(inst => inst.classList.remove('lockdown'));
-                document.querySelectorAll('.btn-toggle, .footer-btns button').forEach(b => {
-                    b.disabled = false;
-                    b.style.opacity = '1';
-                    b.style.cursor = 'pointer';
-                });
-                updateStationStatus();
-            }
-        }
-
-        function closeLockdownModal() {
-            document.getElementById('lockdownModal').style.display = 'none';
-        }
-
-        document.addEventListener('DOMContentLoaded', function () {
-            document.getElementById('lockdownPassword').addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') confirmLockdown();
-            });
-            document.getElementById('newPhone').addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') addPhone();
-            });
-            document.getElementById('newMac').addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') addMac();
-            });
         });
+
+        const map = L.map('map', {
+            zoomControl: true,
+            attributionControl: true
+        }).setView([-15.7801, -47.9292], 4);
+
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: '© Esri',
+            maxZoom: 18
+        }).addTo(map);
+
+        const FENCE_COLORS = [
+            '#00ff00', '#00bfff', '#ff00ff', '#ffa500', '#ff1493',
+            '#00ffff', '#ffff00', '#ff4500', '#7cfc00', '#9370db'
+        ];
+
+        let cattleMarkers = {};
+        let cattleStatus = {};
+        let cattleCoordsVisible = {};
+        let cattleDistances = {};
+        let cattleAlarmEnabled = {};
+        let cattleAutoMuted = {};
+        let fences = [];
+
+        let isAddingCattle = false;
+        let currentBatchNames = [];
+
+        let isDrawingMode = false;
+        let currentFencePoints = [];
+        let currentTempMarkers = [];
+        let currentTempPolyline = null;
+
+        let contextMenuCattleName = null;
+
+        let DISTANCE_THRESHOLD_METERS = 10;
+        let CRITICAL_THRESHOLD_METERS = 3;
+        let MUTE_DISTANCE_METERS = 30;
+        let soundEnabled = true;
+
+        // ===== GPS REAL =====
+        let gpsPairingCode = null;
+        let gpsChannel = null;
+        let gpsCattleName = 'GPS-CELULAR';
+        let gpsMarker = null;
+        let gpsWatchId = null;
+        let gpsConnected = false;
+        let gpsLastUpdate = 0;
+
+        // ===== WEBSOCKET TAILSCALE =====
+        const GPS_WS_URL = 'wss://desktop-h10eg4o.tail087ee7.ts.net:8443/';
+        let gpsSocket = null;
+        let gpsSocketReconnectTimer = null;
+        let gpsSocketConnected = false;
+
+        // ===== ÁUDIO =====
+        let audioCtx = null;
+        let beepTimer = null;
+        let continuousOscillator = null;
+        let continuousGain = null;
+        let currentBeepState = 'silent';
 
         function initAudio() {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioCtx) {
+                try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+            }
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
         }
 
-        function toggleFullscreen() {
-            const btn = document.getElementById('fullBtn');
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().then(() => btn.innerHTML = '⤢').catch(console.log);
+        function emitBeep(frequency = 800, duration = 0.08, volume = 0.15) {
+            if (!soundEnabled || !audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'square';
+            osc.frequency.value = frequency;
+            gain.gain.setValueAtTime(0, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + 0.005);
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
+            osc.start(audioCtx.currentTime);
+            osc.stop(audioCtx.currentTime + duration + 0.01);
+        }
+
+        function startContinuousBeep(frequency = 1000) {
+            if (!soundEnabled || !audioCtx) return;
+            if (continuousOscillator) return;
+            continuousOscillator = audioCtx.createOscillator();
+            continuousGain = audioCtx.createGain();
+            continuousOscillator.connect(continuousGain);
+            continuousGain.connect(audioCtx.destination);
+            continuousOscillator.type = 'square';
+            continuousOscillator.frequency.value = frequency;
+            continuousGain.gain.setValueAtTime(0, audioCtx.currentTime);
+            continuousGain.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 0.02);
+            continuousOscillator.start();
+        }
+
+        function stopContinuousBeep() {
+            if (continuousOscillator) {
+                try {
+                    continuousGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+                    continuousOscillator.stop(audioCtx.currentTime + 0.08);
+                } catch (e) {}
+                continuousOscillator = null;
+                continuousGain = null;
+            }
+        }
+
+        function stopAllBeeps() {
+            if (beepTimer) { clearTimeout(beepTimer); beepTimer = null; }
+            stopContinuousBeep();
+            currentBeepState = 'silent';
+        }
+
+        function scheduleBeep(frequency, interval) {
+            emitBeep(frequency);
+            beepTimer = setTimeout(() => {
+                if (currentBeepState === 'beeping') scheduleBeep(frequency, interval);
+            }, interval);
+        }
+
+        function updateAutoMuteStates() {
+            Object.keys(cattleMarkers).forEach(name => {
+                const info = cattleDistances[name];
+                if (!info) return;
+                if (info.isOutside && info.absDistance >= MUTE_DISTANCE_METERS) {
+                    if (!cattleAutoMuted[name]) cattleAutoMuted[name] = true;
+                }
+            });
+        }
+
+        function updateSoundState() {
+            if (!soundEnabled) { stopAllBeeps(); return; }
+            if (!audioCtx) return;
+            if (fences.length === 0) { stopAllBeeps(); return; }
+
+            updateAutoMuteStates();
+
+            let mostCritical = null;
+            let bestInterval = Infinity;
+            let bestFrequency = 800;
+
+            Object.keys(cattleDistances).forEach(name => {
+                const info = cattleDistances[name];
+                if (!info) return;
+                if (!cattleAlarmEnabled[name]) return;
+                if (cattleAutoMuted[name]) return;
+
+                const abs = info.absDistance;
+
+                if (info.isOutside) {
+                    mostCritical = 'outside'; bestInterval = 0; bestFrequency = 500;
+                    return;
+                }
+                if (abs <= CRITICAL_THRESHOLD_METERS) {
+                    if (mostCritical !== 'outside') {
+                        mostCritical = 'critical'; bestInterval = 0; bestFrequency = 1000;
+                    }
+                } else if (abs <= DISTANCE_THRESHOLD_METERS) {
+                    if (mostCritical !== 'outside' && mostCritical !== 'critical') {
+                        mostCritical = 'warning';
+                        const range = DISTANCE_THRESHOLD_METERS - CRITICAL_THRESHOLD_METERS;
+                        const norm = range > 0 ? (abs - CRITICAL_THRESHOLD_METERS) / range : 0;
+                        const interval = 120 + norm * 680;
+                        const freq = 700 + (1 - norm) * 600;
+                        if (interval < bestInterval) { bestInterval = interval; bestFrequency = freq; }
+                    }
+                }
+            });
+
+            if (mostCritical === 'outside' || mostCritical === 'critical') {
+                if (currentBeepState !== 'continuous') {
+                    if (beepTimer) { clearTimeout(beepTimer); beepTimer = null; }
+                    startContinuousBeep(bestFrequency);
+                    currentBeepState = 'continuous';
+                } else if (continuousOscillator) {
+                    continuousOscillator.frequency.setTargetAtTime(bestFrequency, audioCtx.currentTime, 0.05);
+                }
+            } else if (mostCritical === 'warning') {
+                if (currentBeepState === 'continuous') stopContinuousBeep();
+                if (beepTimer) { clearTimeout(beepTimer); beepTimer = null; }
+                currentBeepState = 'beeping';
+                scheduleBeep(bestFrequency, bestInterval);
             } else {
-                document.exitFullscreen().then(() => btn.innerHTML = '⛶');
+                if (currentBeepState !== 'silent') stopAllBeeps();
             }
         }
 
-        document.addEventListener('fullscreenchange', () => {
-            document.getElementById('fullBtn').innerHTML = document.fullscreenElement ? '⤢' : '⛶';
-        });
-
-        function toggleMute() {
-            if (isLockdownActive) return;
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            isMuted = !isMuted;
-            document.getElementById('muteBtn').style.background = isMuted ? 'var(--red)' : '#1f1f22';
-            client.publish(TOPIC_PREFIX + "/set/mute", isMuted ? "1" : "0");
-            checkSirenStatus();
-            setTimeout(() => { isUserInteracting = false; }, 200);
+        function toggleAlarmForCattle(name) {
+            if (!cattleMarkers[name]) return;
+            if (cattleAlarmEnabled[name]) {
+                cattleAlarmEnabled[name] = false;
+                updateInfo(`🔕 Alarme de <strong>${name}</strong> desativado.`, 'warning');
+            } else {
+                cattleAlarmEnabled[name] = true;
+                cattleAutoMuted[name] = false;
+                updateInfo(`🔔 Alarme de <strong>${name}</strong> ativado!`, 'success');
+            }
+            refreshCattleIcon(name);
+            updateCattleList();
+            updateSoundState();
         }
 
-        function toggleSensor(type) {
-            if (isLockdownActive) return;
-            if (isUserInteracting) return;
-            isUserInteracting = true;
-            sensorStatus[type] = !sensorStatus[type];
-            updateSensorButton(type);
-            const alarmDiv = document.getElementById(type + 'A');
-            if (!sensorStatus[type]) { alarmDiv.classList.remove('alarm-on'); }
-            const topicMap = {
-                gas: TOPIC_PREFIX + '/set/gas_on',
-                temp: TOPIC_PREFIX + '/set/temp_on',
-                flow: TOPIC_PREFIX + '/set/flow_on',
-                press: TOPIC_PREFIX + '/set/press_on',
-                nivel: TOPIC_PREFIX + '/set/nivel_on',
-                pres: TOPIC_PREFIX + '/set/pres_on'
-            };
-            client.publish(topicMap[type], sensorStatus[type] ? "1" : "0");
-            checkSirenStatus();
-            setTimeout(() => { isUserInteracting = false; }, 200);
+        function reactivateAllAlarms() {
+            const names = Object.keys(cattleMarkers);
+            if (names.length === 0) { updateInfo('⚠️ Não há bois no mapa.', 'warning'); return; }
+            names.forEach(name => {
+                cattleAlarmEnabled[name] = true;
+                cattleAutoMuted[name] = false;
+                refreshCattleIcon(name);
+            });
+            updateInfo(`🔔 <strong>${names.length} alarme(s) ativado(s)</strong>!`, 'success');
+            updateCattleList();
+            updateSoundState();
         }
 
-        function checkSirenStatus() {
-            const anyAlarm = document.querySelectorAll('.alarm-on').length > 0;
-            if (!anyAlarm || isMuted) {
-                if (sirenInterval) { clearInterval(sirenInterval); sirenInterval = null; }
-            } else { playSiren(); }
+        function toggleSound() {
+            soundEnabled = document.getElementById('soundToggle').checked;
+            document.getElementById('soundIcon').textContent = soundEnabled ? '🔊' : '🔇';
+            document.getElementById('soundLabel').textContent = soundEnabled ? 'Som Ativado' : 'Som Desativado';
+            if (soundEnabled) { initAudio(); updateSoundState(); }
+            else stopAllBeeps();
         }
 
-        function playSiren() {
+        function testAlertSound() {
             initAudio();
-            if (!sirenInterval && audioCtx) {
-                sirenInterval = setInterval(() => {
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.value = (Math.floor(Date.now() / 400) % 2 === 0) ? 950 : 650;
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-                    osc.start();
-                    osc.stop(audioCtx.currentTime + 0.4);
-                }, 400);
+            if (!soundEnabled) { alert('⚠️ Ative o som primeiro.'); return; }
+            emitBeep(800, 0.1);
+            setTimeout(() => emitBeep(1000, 0.1), 300);
+            setTimeout(() => emitBeep(1200, 0.15), 600);
+        }
+
+        function applyDistanceConfig() {
+            const minInput = document.getElementById('minDistanceInput');
+            const critInput = document.getElementById('criticalDistanceInput');
+            const muteInput = document.getElementById('muteDistanceInput');
+
+            const rawMin = parseFloat(minInput.value);
+            const rawCrit = parseFloat(critInput.value);
+            const rawMute = parseFloat(muteInput.value);
+
+            let minVal, critVal, muteVal;
+            let warnings = [];
+
+            if (isNaN(rawMin) || rawMin <= 0) { minVal = 10; warnings.push('Mín. inválido (10m)'); }
+            else minVal = rawMin;
+
+            if (isNaN(rawCrit) || rawCrit <= 0) { critVal = Math.max(0.5, minVal * 0.3); warnings.push(`Crítico (${critVal.toFixed(1)}m)`); }
+            else if (rawCrit >= minVal) { critVal = Math.max(0.5, minVal * 0.3); warnings.push(`Crítico ajustado (${critVal.toFixed(1)}m)`); }
+            else critVal = rawCrit;
+
+            if (isNaN(rawMute) || rawMute <= 0) { muteVal = 30; warnings.push('Silenciar inválido (30m)'); }
+            else muteVal = rawMute;
+
+            if (rawMin !== minVal || isNaN(rawMin)) minInput.value = minVal;
+            if (rawCrit !== critVal || isNaN(rawCrit)) critInput.value = critVal;
+            if (rawMute !== muteVal || isNaN(rawMute)) muteInput.value = muteVal;
+
+            DISTANCE_THRESHOLD_METERS = minVal;
+            CRITICAL_THRESHOLD_METERS = critVal;
+            MUTE_DISTANCE_METERS = muteVal;
+
+            document.getElementById('currentThreshold').textContent = minVal;
+            document.getElementById('currentCritical').textContent = critVal.toFixed(1);
+            document.getElementById('currentMute').textContent = muteVal;
+
+            cattleAutoMuted = {};
+            updateAllDistanceBubbles();
+            updateSoundState();
+
+            if (warnings.length > 0) updateInfo(`⚠️ ${warnings.join(' | ')}`, 'warning');
+            else updateInfo(`✅ Config: ${minVal}m / ${critVal.toFixed(1)}m / ${muteVal}m`, 'success');
+        }
+
+        ['minDistanceInput', 'criticalDistanceInput', 'muteDistanceInput'].forEach(id => {
+            document.getElementById(id).addEventListener('input', function() {
+                const minVal = parseFloat(document.getElementById('minDistanceInput').value);
+                const critVal = parseFloat(document.getElementById('criticalDistanceInput').value);
+                const muteVal = parseFloat(document.getElementById('muteDistanceInput').value);
+                document.getElementById('currentThreshold').textContent = isNaN(minVal) ? '?' : minVal;
+                document.getElementById('currentCritical').textContent = isNaN(critVal) ? '?' : critVal.toFixed(1);
+                document.getElementById('currentMute').textContent = isNaN(muteVal) ? '?' : muteVal;
+            });
+        });
+
+        function updateSaveMapButton() {
+            const saveMapBtn = document.getElementById('saveMapBtn');
+            saveMapBtn.disabled = !(fences.length > 0 && Object.keys(cattleMarkers).length > 0);
+        }
+
+        // ===== CRIAÇÃO DO ÍCONE (CORRIGIDO) =====
+        function createCattleIcon(name, isAlert) {
+            const ldClass = isAlert ? 'distante' : 'localizado';
+            const ldText = isAlert ? 'D' : 'L';
+            const coordsVisible = cattleCoordsVisible[name] ? 'visible' : '';
+            const alarmOn = cattleAlarmEnabled[name] !== false;
+            const autoMuted = cattleAutoMuted[name] === true;
+            const isGps = name === gpsCattleName || name.startsWith('GPS-');
+
+            const alarmIcon = !alarmOn ? '🔕' : (autoMuted ? '🔇' : '🔔');
+            const alarmClass = !alarmOn ? 'off' : (autoMuted ? 'muted' : 'on');
+            const wrapperClass = !alarmOn ? 'alarm-off' : '';
+
+            // 🆕 Anteninha pequena no lugar do satélite gigante
+            const gpsBadge = isGps ? `<div class="gps-antenna" title="GPS Real Conectado">📡</div>` : '';
+
+            return L.divIcon({
+                className: 'cattle-icon',
+                html: `
+                    <div class="cattle-wrapper ${isAlert ? 'alert' : ''} ${wrapperClass}" id="wrapper-${name}">
+                        ${gpsBadge}
+                        <div class="alarm-status ${alarmClass}" id="alarm-status-${name}">${alarmIcon}</div>
+                        <div class="distance-bubble" id="bubble-${name}">📏 --</div>
+                       <div class="cattle-emoji">🐂</div>
+${!isGps ? `
+    <div class="cattle-label">
+        ${name}
+        <span class="ld-indicator ${ldClass}">${ldText}</span>
+    </div>
+` : ''}
+                        <div class="cattle-coords ${coordsVisible}" id="coords-icon-${name}">0.00000, 0.00000</div>
+                    </div>
+                `,
+                iconSize: [70, 65],
+                iconAnchor: [35, 58]
+            });
+        }
+
+        function refreshCattleIcon(name) {
+            const marker = cattleMarkers[name];
+            if (!marker) return;
+            const isAlert = !cattleStatus[name];
+            marker.setIcon(createCattleIcon(name, isAlert));
+            updateDistanceBubble(name);
+        }
+
+        function createDeleteIcon(fenceId) {
+            return L.divIcon({
+                className: 'fence-delete-icon',
+                html: `<div class="fence-delete-btn" id="delete-btn-${fenceId}">🗑️</div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+        }
+
+        function pointToSegmentDistanceMeters(pLat, pLng, aLat, aLng, bLat, bLng) {
+            const latRef = (aLat + bLat) / 2;
+            const mPerDegLat = 111320;
+            const mPerDegLng = 111320 * Math.cos(latRef * Math.PI / 180);
+            const px = pLng * mPerDegLng, py = pLat * mPerDegLat;
+            const ax = aLng * mPerDegLng, ay = aLat * mPerDegLat;
+            const bx = bLng * mPerDegLng, by = bLat * mPerDegLat;
+            const dx = bx - ax, dy = by - ay;
+            const lengthSq = dx * dx + dy * dy;
+            let t = 0;
+            if (lengthSq > 0) {
+                t = ((px - ax) * dx + (py - ay) * dy) / lengthSq;
+                t = Math.max(0, Math.min(1, t));
+            }
+            const projX = ax + t * dx, projY = ay + t * dy;
+            const distX = px - projX, distY = py - projY;
+            return Math.sqrt(distX * distX + distY * distY);
+        }
+
+        function getDistanceInfo(lat, lng) {
+            if (fences.length === 0) return null;
+            let isInsideAny = false;
+            for (let i = 0; i < fences.length; i++) {
+                const coords = fences[i].polygon.getLatLngs()[0].map(p => [p.lat, p.lng]);
+                if (isPointInPolygon([lat, lng], coords)) { isInsideAny = true; break; }
+            }
+            let minDist = Infinity, closestFenceId = null;
+            fences.forEach(fence => {
+                const pts = fence.polygon.getLatLngs()[0];
+                for (let i = 0; i < pts.length; i++) {
+                    const a = pts[i], b = pts[(i + 1) % pts.length];
+                    const d = pointToSegmentDistanceMeters(lat, lng, a.lat, a.lng, b.lat, b.lng);
+                    if (d < minDist) { minDist = d; closestFenceId = fence.id; }
+                }
+            });
+            const absDistance = minDist;
+            const isOutside = !isInsideAny;
+            return { distance: isOutside ? -absDistance : absDistance, absDistance, fenceId: closestFenceId, isOutside };
+        }
+
+        function updateDistanceBubble(name) {
+            const bubbleEl = document.getElementById(`bubble-${name}`);
+            const info = cattleDistances[name];
+            if (!bubbleEl) return;
+            if (!info) {
+                bubbleEl.classList.remove('visible', 'warning', 'critical', 'outside', 'muted');
+                return;
+            }
+            const abs = info.absDistance;
+            const alarmOn = cattleAlarmEnabled[name] !== false;
+            const autoMuted = cattleAutoMuted[name] === true;
+            const shouldShow = info.isOutside || abs <= DISTANCE_THRESHOLD_METERS;
+
+            if (!shouldShow) {
+                bubbleEl.classList.remove('visible', 'warning', 'critical', 'outside', 'muted');
+                return;
+            }
+
+            let text;
+            if (info.isOutside) {
+                if (abs < 1) text = `-${(abs * 100).toFixed(0)} cm`;
+                else if (abs < 10) text = `-${abs.toFixed(1)} m`;
+                else text = `-${abs.toFixed(0)} m`;
+            } else {
+                if (abs < 1) text = `${(abs * 100).toFixed(0)} cm`;
+                else if (abs < 10) text = `${abs.toFixed(1)} m`;
+                else text = `${abs.toFixed(0)} m`;
+            }
+
+            if (!alarmOn) text = `🔕 ${text}`;
+            else if (autoMuted) text = `🔇 ${text}`;
+            else text = `📏 ${text}`;
+
+            bubbleEl.textContent = text;
+            bubbleEl.classList.add('visible');
+            bubbleEl.classList.remove('warning', 'critical', 'outside', 'muted');
+
+            if (!alarmOn || autoMuted) {
+                bubbleEl.classList.add('muted');
+                if (info.isOutside) bubbleEl.classList.add('outside');
+                return;
+            }
+            if (info.isOutside) {
+                bubbleEl.classList.add('outside');
+                if (abs <= CRITICAL_THRESHOLD_METERS) bubbleEl.classList.add('critical');
+            } else if (abs <= CRITICAL_THRESHOLD_METERS) {
+                bubbleEl.classList.add('critical');
+            } else {
+                bubbleEl.classList.add('warning');
             }
         }
 
-        // ==================== MQTT ====================
-        client.on("connect", () => {
-            document.getElementById('webLed').classList.add('online');
-            client.subscribe(TOPIC_PREFIX + "/set/#");
-            client.subscribe(TOPIC_PREFIX + "/status/#");
-            client.subscribe(TOPIC_PREFIX + "/config/#");
-            client.subscribe(TOPIC_PREFIX + "/gas/#");
-            client.subscribe(TOPIC_PREFIX + "/temp/#");
-            client.subscribe(TOPIC_PREFIX + "/fluxo/#");
-            client.subscribe(TOPIC_PREFIX + "/pressao/#");
-            client.subscribe(TOPIC_PREFIX + "/nivel/#");
-            client.subscribe(TOPIC_PREFIX + "/presenca/#");
-            client.subscribe(TOPIC_PREFIX + "/info");
-            setTimeout(loadConfigFromESP, 800);
-        });
+        function updateAllDistanceBubbles() {
+            Object.keys(cattleMarkers).forEach(name => {
+                const marker = cattleMarkers[name];
+                const pos = marker.getLatLng();
+                const info = getDistanceInfo(pos.lat, pos.lng);
+                cattleDistances[name] = info;
+                updateDistanceBubble(name);
+            });
+            updateCattleList();
+            updateSoundState();
+        }
 
-        client.on("message", (t, m) => {
-            const topic = t.toString();
-            const val = m.toString();
+        function updateSingleDistanceBubble(name) {
+            const marker = cattleMarkers[name];
+            if (!marker) return;
+            const pos = marker.getLatLng();
+            const info = getDistanceInfo(pos.lat, pos.lng);
+            cattleDistances[name] = info;
+            updateDistanceBubble(name);
+        }
 
-            if (topic.startsWith(TOPIC_PREFIX + "/config/") || topic.startsWith(TOPIC_PREFIX + "/status/")) {
-                applyConfigFromESP(topic, val);
-                return;
-            }
+        function toggleCattlePanel() {
+            const panel = document.getElementById('cattleListPanel');
+            const btn = document.getElementById('minimizeBtn');
+            panel.classList.toggle('minimized');
+            btn.textContent = panel.classList.contains('minimized') ? '+' : '−';
+        }
 
-            if (topic.startsWith(TOPIC_PREFIX) && !topic.includes("/set/")) {
-                isStationOnline = true;
-                lastStationPing = Date.now();
-                updateStationStatus();
-            }
+        function toggleCattleMode() {
+            if (isAddingCattle) { finishCattleMode(); return; }
+            const input = prompt('📝 Digite os nomes das coleiras separados por vírgula:', 'B1, B2, B3');
+            if (input === null) return;
+            const names = parseBatchNames(input);
+            if (names.length === 0) { alert('⚠️ Nenhum nome válido.'); return; }
+            startBatchMode(names);
+        }
 
-            if (topic === TOPIC_PREFIX + "/status/lockdown") {
-                isLockdownActive = (val === "1");
-                applyLockdownState();
-                return;
-            }
+        function parseBatchNames(input) {
+            const raw = input.split(/[,\n;]+/);
+            const cleaned = [], seen = new Set();
+            raw.forEach(n => {
+                const name = n.trim();
+                if (!name || seen.has(name)) return;
+                seen.add(name); cleaned.push(name);
+            });
+            return cleaned;
+        }
 
-            if (isLockdownActive) return;
+        function startBatchMode(names) {
+            isAddingCattle = true;
+            currentBatchNames = names;
+            document.getElementById('addCattleBtn').classList.add('active');
+            document.getElementById('addCattleBtn').textContent = '🐂 Modo Ativo';
+            document.getElementById('cancelCattleBtn').style.display = 'block';
+            document.getElementById('cattleActionsRow').style.display = 'flex';
+            document.getElementById('map').classList.add('placing-cattle');
+            const banner = document.getElementById('modeBanner');
+            banner.classList.add('visible');
+            document.getElementById('batchInfo').textContent = names.join(', ');
+            updateToolbarStatus(`🐂 Modo ativo: ${names.length} coleira(s).`);
+            map.off('click', onMapClickForBatch);
+            map.on('click', onMapClickForBatch);
+        }
 
-            const num = parseFloat(val);
+        function promptNewBatch() {
+            const input = prompt('📝 Novo lote de nomes:', '');
+            if (input === null) return;
+            const names = parseBatchNames(input);
+            if (names.length === 0) { alert('⚠️ Nenhum nome válido.'); return; }
+            currentBatchNames = names;
+            document.getElementById('batchInfo').textContent = names.join(', ');
+        }
 
-            if (topic.includes(TOPIC_PREFIX + "/gas/vazamento")) {
-                hasReceivedData.gas = true;
-                updateSensorStatus('gas');
-                const sp = parseInt(document.getElementById('s1').value) || 2000;
-                const zero = parseInt(document.getElementById('s6').value) || 0;
-                const real = Math.max(0, num - zero);
-                document.getElementById('gasV').innerText = real.toString().padStart(4, '0');
-                document.getElementById('gasB').style.width = Math.min((real / sp) * 100, 100) + "%";
-                document.getElementById('gasA').classList.toggle('alarm-on', real >= sp && sensorStatus.gas && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/temp/ambiente")) {
-                hasReceivedData.temp = true;
-                updateSensorStatus('temp');
-                const sp = parseFloat(document.getElementById('s2').value) || 50;
-                document.getElementById('tempV').innerText = num.toFixed(1);
-                document.getElementById('tempB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('tempA').classList.toggle('alarm-on', num >= sp && sensorStatus.temp && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/fluxo/agua")) {
-                hasReceivedData.flow = true;
-                updateSensorStatus('flow');
-                const sp = parseFloat(document.getElementById('s3').value) || 10;
-                document.getElementById('flowV').innerText = num.toFixed(1);
-                document.getElementById('flowB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('flowA').classList.toggle('alarm-on', num >= sp && sensorStatus.flow && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/pressao/agua")) {
-                hasReceivedData.press = true;
-                updateSensorStatus('press');
-                const sp = parseFloat(document.getElementById('s4').value) || 4;
-                document.getElementById('pressV').innerText = num.toFixed(2);
-                document.getElementById('pressB').style.width = Math.min((num / sp) * 100, 100) + "%";
-                document.getElementById('pressA').classList.toggle('alarm-on', num >= sp && sensorStatus.press && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/nivel/caixa")) {
-                hasReceivedData.nivel = true;
-                updateSensorStatus('nivel');
-                const sp = parseFloat(document.getElementById('s5').value) || 80;
-                document.getElementById('nivelV').innerText = num.toFixed(1);
-                document.getElementById('nivelB').style.width = Math.min(num, 100) + "%";
-                document.getElementById('nivelA').classList.toggle('alarm-on', num >= sp && sensorStatus.nivel && isStationOnline);
-            }
-            else if (topic.includes(TOPIC_PREFIX + "/presenca/status")) {
-                hasReceivedData.pres = true;
-                updateSensorStatus('pres');
-                const det = (val === "DETECTADO");
-                document.getElementById('presV').innerText = det ? "ALERT" : "OK";
-                document.getElementById('presV').style.color = det ? "#ff2d55" : "#00f5ff";
-                document.getElementById('presA').classList.toggle('alarm-on', det && sensorStatus.pres && isStationOnline);
-            }
+        function finishCattleMode() {
+            isAddingCattle = false;
+            currentBatchNames = [];
+            document.getElementById('addCattleBtn').classList.remove('active');
+            document.getElementById('addCattleBtn').textContent = '➕ Adicionar Coleiras';
+            document.getElementById('cancelCattleBtn').style.display = 'none';
+            document.getElementById('cattleActionsRow').style.display = 'none';
+            document.getElementById('map').classList.remove('placing-cattle');
+            document.getElementById('modeBanner').classList.remove('visible');
+            map.off('click', onMapClickForBatch);
+            updateToolbarStatus('✅ Modo finalizado.');
+        }
 
-            checkSirenStatus();
-        });
+        function cancelCattleMode() {
+            isAddingCattle = false;
+            currentBatchNames = [];
+            document.getElementById('addCattleBtn').classList.remove('active');
+            document.getElementById('addCattleBtn').textContent = '➕ Adicionar Coleiras';
+            document.getElementById('cancelCattleBtn').style.display = 'none';
+            document.getElementById('cattleActionsRow').style.display = 'none';
+            document.getElementById('map').classList.remove('placing-cattle');
+            document.getElementById('modeBanner').classList.remove('visible');
+            map.off('click', onMapClickForBatch);
+            updateToolbarStatus('❌ Modo cancelado.');
+        }
 
-        setInterval(() => {
-            if (isStationOnline && (Date.now() - lastStationPing > STATION_TIMEOUT)) {
-                isStationOnline = false;
-                updateStationStatus();
-                ['gas', 'temp', 'flow', 'press', 'nivel', 'pres'].forEach(s => {
-                    hasReceivedData[s] = false;
-                    updateSensorStatus(s);
+        function onMapClickForBatch(e) {
+            if (currentBatchNames.length === 0) return;
+            const baseLat = e.latlng.lat, baseLng = e.latlng.lng;
+            const total = currentBatchNames.length;
+            const spacing = 0.00025;
+            let addedCount = 0, skippedCount = 0;
+            const placedNames = [];
+
+            currentBatchNames.forEach((name, index) => {
+                if (cattleMarkers[name]) { skippedCount++; return; }
+                const offsetX = (index - (total - 1) / 2) * spacing;
+                const lat = baseLat, lng = baseLng + offsetX;
+
+                cattleAlarmEnabled[name] = true;
+                cattleAutoMuted[name] = false;
+
+                const marker = L.marker([lat, lng], {
+                    draggable: true,
+                    icon: createCattleIcon(name, false)
+                }).addTo(map);
+
+                updateCoordsInDOM(name, lat, lng);
+
+                marker.on('drag', (ev) => onCattleDrag(ev, name));
+                marker.on('dragend', (ev) => onCattleDragEnd(ev, name));
+                marker.on('dblclick', (ev) => {
+                    L.DomEvent.stopPropagation(ev);
+                    toggleCoords(name);
                 });
-                document.querySelectorAll('.alarm').forEach(el => el.classList.remove('alarm-on'));
-                checkSirenStatus();
-            }
-        }, 2000);
+                marker.on('contextmenu', (ev) => {
+                    L.DomEvent.stopPropagation(ev);
+                    L.DomEvent.preventDefault(ev);
+                    openContextMenu(name, ev);
+                });
 
-        function save() {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Desative para salvar.');
-                return;
-            }
-            const configs = {
-                s1: document.getElementById('s1').value,
-                s2: document.getElementById('s2').value,
-                s3: document.getElementById('s3').value,
-                s4: document.getElementById('s4').value,
-                s5: document.getElementById('s5').value,
-                s6: document.getElementById('s6').value
-            };
-            for (let id in configs) {
-                client.publish(TOPIC_PREFIX + '/set/' + id, configs[id]);
-            }
-            client.publish(TOPIC_PREFIX + '/set/phones', JSON.stringify(phones));
-            client.publish(TOPIC_PREFIX + '/set/macs', JSON.stringify(macs));
-            client.publish(TOPIC_PREFIX + '/set/sms_enable', smsEnabled ? "1" : "0");
-            client.publish(TOPIC_PREFIX + '/set/whats_enable', whatsEnabled ? "1" : "0");
-            document.getElementById('modal').style.display = 'none';
-            showToast('✅ Configurações salvas no ESP');
+                cattleMarkers[name] = marker;
+                cattleStatus[name] = true;
+                cattleCoordsVisible[name] = false;
+                placedNames.push(name);
+                addedCount++;
+            });
+
+            placedNames.forEach(name => updateSingleDistanceBubble(name));
+            updateCattleList();
+            updateSaveMapButton();
+            updateSoundState();
+            if (addedCount > 0) updateInfo(`✅ ${addedCount} coleira(s) adicionada(s).`, 'success');
         }
 
-        window.onload = () => {
-            const keys = ['s1', 's2', 's3', 's4', 's5', 's6'];
-            const defaults = [2000, 50, 10, 4, 80, 0];
-            keys.forEach((k, i) => {
-                const saved = localStorage.getItem('wellguard_v10_' + k);
-                document.getElementById(k).value = saved || defaults[i];
-            });
-            renderPhones();
-            renderMacs();
-            applyLockdownState();
-            updateStationStatus();
-            updateSmsButtons();
-            document.getElementById('syncStatus').textContent = '⏳ aguardando ESP...';
-            document.getElementById('macSyncStatus').textContent = '⏳ aguardando ESP...';
-        };
+        async function saveMap() {
+            if (fences.length === 0) { alert('⚠️ Salve pelo menos uma cerca!'); return; }
+            if (Object.keys(cattleMarkers).length === 0) { alert('Adicione pelo menos uma coleira!'); return; }
 
-        function generatePDF() {
-            if (isLockdownActive) {
-                alert('🔒 Sistema em LOCKDOWN! Não é possível gerar PDF.');
+            const mapData = {
+                version: '1.0',
+                savedAt: new Date().toISOString(),
+                distanceConfig: {
+                    threshold: DISTANCE_THRESHOLD_METERS,
+                    critical: CRITICAL_THRESHOLD_METERS,
+                    mute: MUTE_DISTANCE_METERS
+                },
+                mapCenter: { lat: map.getCenter().lat, lng: map.getCenter().lng, zoom: map.getZoom() },
+                cattle: {},
+                fences: []
+            };
+
+            Object.keys(cattleMarkers).forEach(name => {
+                const marker = cattleMarkers[name];
+                const pos = marker.getLatLng();
+                mapData.cattle[name] = {
+                    lat: pos.lat, lng: pos.lng,
+                    status: cattleStatus[name],
+                    coordsVisible: cattleCoordsVisible[name],
+                    alarmEnabled: cattleAlarmEnabled[name] !== false,
+                    isGps: name.startsWith('GPS-')
+                };
+            });
+
+            fences.forEach(fence => {
+                const polygonCoords = fence.polygon.getLatLngs()[0].map(p => ({ lat: p.lat, lng: p.lng }));
+                const deleteMarkerPos = fence.deleteMarker ? fence.deleteMarker.getLatLng() : null;
+                mapData.fences.push({
+                    id: fence.id, color: fence.color, points: fence.points,
+                    polygonCoords, cattleInside: fence.cattleInside,
+                    deleteMarkerPos: deleteMarkerPos ? { lat: deleteMarkerPos.lat, lng: deleteMarkerPos.lng } : null
+                });
+            });
+
+            const jsonData = JSON.stringify(mapData, null, 2);
+            const fileName = `mapa_gado_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: fileName,
+                        types: [{ description: 'Arquivo JSON', accept: { 'application/json': ['.json'] } }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(jsonData);
+                    await writable.close();
+                    updateInfo(`✅ Mapa salvo!`, 'success');
+                } catch (err) {
+                    if (err.name !== 'AbortError') alert('Erro ao salvar.');
+                }
+            } else {
+                const blob = new Blob([jsonData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = fileName;
+                document.body.appendChild(a); a.click();
+                document.body.removeChild(a); URL.revokeObjectURL(url);
+                updateInfo(`✅ Mapa baixado!`, 'success');
+            }
+        }
+
+        function loadMap(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const mapData = JSON.parse(e.target.result);
+                    restoreMap(mapData);
+                } catch (err) { alert('Erro ao carregar.'); }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        function restoreMap(mapData) {
+            if (!mapData || !mapData.version) { alert('Arquivo inválido!'); return; }
+            if (!confirm('Isso irá substituir o mapa atual. Continuar?')) return;
+            clearAllData();
+
+            if (mapData.distanceConfig) {
+                DISTANCE_THRESHOLD_METERS = mapData.distanceConfig.threshold || 10;
+                CRITICAL_THRESHOLD_METERS = mapData.distanceConfig.critical || 3;
+                MUTE_DISTANCE_METERS = mapData.distanceConfig.mute || 30;
+                document.getElementById('minDistanceInput').value = DISTANCE_THRESHOLD_METERS;
+                document.getElementById('criticalDistanceInput').value = CRITICAL_THRESHOLD_METERS;
+                document.getElementById('muteDistanceInput').value = MUTE_DISTANCE_METERS;
+                document.getElementById('currentThreshold').textContent = DISTANCE_THRESHOLD_METERS;
+                document.getElementById('currentCritical').textContent = CRITICAL_THRESHOLD_METERS.toFixed(1);
+                document.getElementById('currentMute').textContent = MUTE_DISTANCE_METERS;
+            }
+
+            if (mapData.mapCenter) map.setView([mapData.mapCenter.lat, mapData.mapCenter.lng], mapData.mapCenter.zoom);
+
+            if (mapData.cattle) {
+                Object.keys(mapData.cattle).forEach(name => {
+                    const cattleData = mapData.cattle[name];
+                    const pos = [cattleData.lat, cattleData.lng];
+                    cattleAlarmEnabled[name] = cattleData.alarmEnabled !== false;
+                    cattleAutoMuted[name] = false;
+
+                    const marker = L.marker(pos, {
+                        draggable: true,
+                        icon: createCattleIcon(name, !cattleData.status)
+                    }).addTo(map);
+
+                    updateCoordsInDOM(name, pos[0], pos[1]);
+                    marker.on('drag', (e) => onCattleDrag(e, name));
+                    marker.on('dragend', (e) => onCattleDragEnd(e, name));
+                    marker.on('dblclick', (e) => { L.DomEvent.stopPropagation(e); toggleCoords(name); });
+                    marker.on('contextmenu', (e) => {
+                        L.DomEvent.stopPropagation(e); L.DomEvent.preventDefault(e);
+                        openContextMenu(name, e);
+                    });
+
+                    cattleMarkers[name] = marker;
+                    cattleStatus[name] = cattleData.status;
+                    cattleCoordsVisible[name] = cattleData.coordsVisible || false;
+                });
+                updateCattleList();
+            }
+
+            if (mapData.fences) {
+                mapData.fences.forEach(fenceData => {
+                    const polygon = L.polygon(fenceData.polygonCoords, {
+                        color: fenceData.color, weight: 3,
+                        fillColor: fenceData.color, fillOpacity: 0.05, dashArray: '12, 6'
+                    }).addTo(map);
+                    const fence = {
+                        id: fenceData.id, color: fenceData.color, polygon,
+                        deleteMarker: null, points: fenceData.points,
+                        cattleInside: fenceData.cattleInside || []
+                    };
+                    fences.push(fence);
+                    if (fenceData.deleteMarkerPos) {
+                        const dm = L.marker([fenceData.deleteMarkerPos.lat, fenceData.deleteMarkerPos.lng], {
+                            icon: createDeleteIcon(fence.id), zIndexOffset: 1000
+                        }).addTo(map);
+                        dm.on('click', (e) => { L.DomEvent.stopPropagation(e); removeFence(fence.id); });
+                        fence.deleteMarker = dm;
+                    } else addDeleteButtonToMap(fence);
+                });
+                document.getElementById('removeAllBtn').disabled = fences.length === 0;
+            }
+            updateSaveMapButton();
+            updateAllDistanceBubbles();
+            updateInfo(`✅ Mapa carregado!`, 'success');
+        }
+
+        function clearAllData() {
+            stopAllBeeps();
+            Object.values(cattleMarkers).forEach(m => map.removeLayer(m));
+            cattleMarkers = {}; cattleStatus = {}; cattleCoordsVisible = {};
+            cattleDistances = {}; cattleAlarmEnabled = {}; cattleAutoMuted = {};
+            fences.forEach(fence => {
+                map.removeLayer(fence.polygon);
+                if (fence.deleteMarker) map.removeLayer(fence.deleteMarker);
+            });
+            fences = [];
+            updateCattleList();
+            document.getElementById('removeAllBtn').disabled = true;
+            updateSaveMapButton();
+        }
+
+        function updateCoordsInDOM(name, lat, lng) {
+            const coordsEl = document.getElementById(`coords-icon-${name}`);
+            if (coordsEl) coordsEl.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        }
+
+        function updateAlertStateInDOM(name, isAlert) {
+            const wrapper = document.getElementById(`wrapper-${name}`);
+            if (wrapper) {
+                if (isAlert) wrapper.classList.add('alert');
+                else wrapper.classList.remove('alert');
+                const ldIndicator = wrapper.querySelector('.ld-indicator');
+                if (ldIndicator) {
+                    ldIndicator.classList.toggle('distante', isAlert);
+                    ldIndicator.classList.toggle('localizado', !isAlert);
+                    ldIndicator.textContent = isAlert ? 'D' : 'L';
+                }
+            }
+        }
+
+        function updateCattleList() {
+            const list = document.getElementById('cattleList');
+            const names = Object.keys(cattleMarkers);
+            if (names.length === 0) {
+                list.innerHTML = '<div class="empty-list">Nenhuma coleira</div>';
                 return;
             }
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            doc.setFontSize(16);
-            doc.text("RELATÓRIO WELLGUARD PRO X", 20, 20);
-            doc.setFontSize(11);
-            doc.text(`Estação: 01`, 20, 30);
-            doc.text(`API SMS: Infobip`, 20, 38);
-            doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, 20, 46);
-            doc.text(`SMS GERAL: ${smsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 54);
-            doc.text(`WhatsApp: ${whatsEnabled ? 'ATIVADO' : 'DESATIVADO'}`, 20, 62);
-            doc.text(`Telefones cadastrados: ${phones.length}`, 20, 70);
-            phones.forEach((phone, i) => {
-                doc.text(`${i + 1}. ${phone} - ${phoneEnabled[i] ? 'ATIVO' : 'INATIVO'}`, 20, 80 + (i * 8));
+            let html = '';
+            names.forEach(name => {
+                const info = cattleDistances[name];
+                const alarmOn = cattleAlarmEnabled[name] !== false;
+                const autoMuted = cattleAutoMuted[name] === true;
+                const isGps = name.startsWith('GPS-');
+                let badgeHTML = '';
+
+                if (isGps) {
+                    badgeHTML = `<span class="dist-badge gps-badge-list">📡 GPS</span>`;
+                } else if (info && fences.length > 0) {
+                    const abs = info.absDistance;
+                    let badgeClass = 'dist-badge', badgeText, prefix = info.isOutside ? '-' : '';
+                    if (!alarmOn || autoMuted) {
+                        badgeClass += ' muted-badge';
+                        badgeText = `${prefix}${abs < 10 ? abs.toFixed(1) : abs.toFixed(0)}m`;
+                    } else if (info.isOutside) {
+                        badgeClass += ' outside';
+                        badgeText = `${prefix}${abs < 10 ? abs.toFixed(1) : abs.toFixed(0)}m`;
+                    } else if (abs <= CRITICAL_THRESHOLD_METERS) {
+                        badgeClass += ' critical';
+                        badgeText = `${abs.toFixed(1)}m`;
+                    } else if (abs <= DISTANCE_THRESHOLD_METERS) {
+                        badgeClass += ' near';
+                        badgeText = `${abs.toFixed(1)}m`;
+                    } else badgeText = `${abs.toFixed(0)}m`;
+                    badgeHTML = `<span class="${badgeClass}">📏 ${badgeText}</span>`;
+                }
+
+                const adClass = alarmOn ? 'on' : 'off';
+                const adText = alarmOn ? 'A' : 'D';
+
+                html += `
+                    <div class="cattle-list-item">
+                        <span class="name">${isGps ? '📡' : '🐂'} ${name}</span>
+                        <span class="ad-switch ${adClass}" onclick="toggleAlarmForCattle('${name}')">${adText}</span>
+                        ${badgeHTML}
+                        <button class="remove-cattle" onclick="removeCattle('${name}')">✕</button>
+                    </div>
+                `;
             });
-            doc.text(`Técnicos autorizados (MAC): ${macs.length}`, 20, 80 + (phones.length * 8) + 10);
-            macs.forEach((mac, i) => {
-                doc.text(`${i + 1}. ${mac}`, 20, 80 + (phones.length * 8) + 20 + (i * 8));
+            list.innerHTML = html;
+        }
+
+        function removeCattle(name) {
+            if (!confirm(`Remover "${name}"?`)) return;
+            if (cattleMarkers[name]) {
+                map.removeLayer(cattleMarkers[name]);
+                delete cattleMarkers[name];
+                delete cattleStatus[name];
+                delete cattleCoordsVisible[name];
+                delete cattleDistances[name];
+                delete cattleAlarmEnabled[name];
+                delete cattleAutoMuted[name];
+            }
+            updateCattleList();
+            updateSaveMapButton();
+            updateAllDistanceBubbles();
+            updateInfo(`🗑️ "${name}" removida.`, 'warning');
+        }
+
+        function toggleFenceMode() {
+            if (isDrawingMode) { cancelFence(); return; }
+            if (Object.keys(cattleMarkers).length === 0) { alert('Adicione coleiras antes!'); return; }
+            isDrawingMode = true;
+            currentFencePoints = [];
+            const btn = document.getElementById('drawFenceBtn');
+            btn.classList.add('active');
+            btn.textContent = '🖊️ Cancelar Desenho';
+            document.getElementById('saveFenceBtn').style.display = 'block';
+            document.getElementById('saveFenceBtn').disabled = true;
+            document.getElementById('cancelFenceBtn').style.display = 'block';
+            document.getElementById('map').classList.add('drawing-mode');
+            updateToolbarStatus('🎯 Clique no mapa. Mínimo 3 pontos.');
+            map.on('click', onMapClickForFence);
+        }
+
+        function onMapClickForFence(e) {
+            const { lat, lng } = e.latlng;
+            currentFencePoints.push([lat, lng]);
+            const tempMarker = L.circleMarker([lat, lng], {
+                radius: 6, color: '#ff4444', fillColor: '#ff1744', fillOpacity: 1, weight: 3
+            }).addTo(map);
+            currentTempMarkers.push(tempMarker);
+            updateTempPolyline();
+            if (currentFencePoints.length >= 3) {
+                document.getElementById('saveFenceBtn').disabled = false;
+                updateToolbarStatus(`✅ ${currentFencePoints.length} pontos.`);
+            } else updateToolbarStatus(`📍 Ponto ${currentFencePoints.length}.`);
+        }
+
+        function updateTempPolyline() {
+            if (currentTempPolyline) map.removeLayer(currentTempPolyline);
+            if (currentFencePoints.length > 1) {
+                currentTempPolyline = L.polyline(currentFencePoints, {
+                    color: '#ff4444', weight: 4, dashArray: '8, 12', opacity: 0.9
+                }).addTo(map);
+            }
+        }
+
+        function saveFence() {
+            if (currentFencePoints.length < 3) { alert('Mínimo 3 pontos!'); return; }
+            currentTempMarkers.forEach(m => map.removeLayer(m));
+            currentTempMarkers = [];
+            if (currentTempPolyline) { map.removeLayer(currentTempPolyline); currentTempPolyline = null; }
+
+            const fenceId = fences.length + 1;
+            const color = FENCE_COLORS[(fenceId - 1) % FENCE_COLORS.length];
+            const polygon = L.polygon(currentFencePoints, {
+                color, weight: 3, fillColor: color, fillOpacity: 0.05, dashArray: '12, 6'
+            }).addTo(map);
+            const fence = {
+                id: fenceId, color, polygon, deleteMarker: null,
+                points: [...currentFencePoints], cattleInside: []
+            };
+            fences.push(fence);
+            checkCattleInFence(fence);
+            addDeleteButtonToMap(fence);
+            exitDrawingMode();
+            map.fitBounds(polygon.getBounds());
+            updateSaveMapButton();
+            cattleAutoMuted = {};
+            updateAllDistanceBubbles();
+            updateInfo(`✅ Cerca ${fenceId} salva!`, 'success');
+            document.getElementById('removeAllBtn').disabled = false;
+        }
+
+        function checkCattleInFence(fence) {
+            const polygonCoords = fence.polygon.getLatLngs()[0].map(p => [p.lat, p.lng]);
+            Object.keys(cattleMarkers).forEach(name => {
+                const pos = cattleMarkers[name].getLatLng();
+                if (isPointInPolygon([pos.lat, pos.lng], polygonCoords)) {
+                    if (!fence.cattleInside.includes(name)) fence.cattleInside.push(name);
+                    cattleStatus[name] = true;
+                    updateAlertStateInDOM(name, false);
+                }
             });
-            doc.save("Relatorio_WellGuard_Estacao01.pdf");
+        }
+
+        function addDeleteButtonToMap(fence) {
+            const bounds = fence.polygon.getBounds();
+            const topRight = bounds.getNorthEast();
+            const dm = L.marker(topRight, { icon: createDeleteIcon(fence.id), zIndexOffset: 1000 }).addTo(map);
+            dm.on('click', (e) => { L.DomEvent.stopPropagation(e); removeFence(fence.id); });
+            fence.deleteMarker = dm;
+        }
+
+        function cancelFence() {
+            currentTempMarkers.forEach(m => map.removeLayer(m));
+            currentTempMarkers = [];
+            if (currentTempPolyline) { map.removeLayer(currentTempPolyline); currentTempPolyline = null; }
+            currentFencePoints = [];
+            exitDrawingMode();
+            updateToolbarStatus('❌ Desenho cancelado.');
+        }
+
+        function removeFence(fenceId) {
+            const idx = fences.findIndex(f => f.id === fenceId);
+            if (idx === -1) return;
+            const fence = fences[idx];
+            if (!confirm(`Remover Cerca ${fenceId}?`)) return;
+            map.removeLayer(fence.polygon);
+            if (fence.deleteMarker) map.removeLayer(fence.deleteMarker);
+            fences.splice(idx, 1);
+            updateAllCattleStatus();
+            updateSaveMapButton();
+            cattleAutoMuted = {};
+            updateAllDistanceBubbles();
+            updateInfo(`🗑️ Cerca ${fenceId} removida.`, 'warning');
+            if (fences.length === 0) document.getElementById('removeAllBtn').disabled = true;
+        }
+
+        function removeAllFences() {
+            if (fences.length === 0) return;
+            if (!confirm(`Remover TODAS as ${fences.length} cerca(s)?`)) return;
+            fences.forEach(fence => {
+                map.removeLayer(fence.polygon);
+                if (fence.deleteMarker) map.removeLayer(fence.deleteMarker);
+            });
+            fences = [];
+            updateAllCattleStatus();
+            updateSaveMapButton();
+            cattleAutoMuted = {};
+            updateAllDistanceBubbles();
+            document.getElementById('removeAllBtn').disabled = true;
+            updateInfo('🗑️ Todas as cercas removidas.', 'warning');
+        }
+
+        function updateAllCattleStatus() {
+            Object.keys(cattleMarkers).forEach(name => {
+                let inside = false;
+                fences.forEach(fence => {
+                    const coords = fence.polygon.getLatLngs()[0].map(p => [p.lat, p.lng]);
+                    const pos = cattleMarkers[name].getLatLng();
+                    if (isPointInPolygon([pos.lat, pos.lng], coords)) inside = true;
+                });
+                cattleStatus[name] = inside;
+                updateAlertStateInDOM(name, !inside);
+            });
+        }
+
+        function exitDrawingMode() {
+            isDrawingMode = false;
+            map.off('click', onMapClickForFence);
+            const btn = document.getElementById('drawFenceBtn');
+            btn.classList.remove('active');
+            btn.textContent = '🖊️ Nova Cerca';
+            document.getElementById('saveFenceBtn').style.display = 'none';
+            document.getElementById('saveFenceBtn').disabled = true;
+            document.getElementById('cancelFenceBtn').style.display = 'none';
+            document.getElementById('map').classList.remove('drawing-mode');
+        }
+
+        function onCattleDrag(e, cattleName) {
+            const pos = e.target.getLatLng();
+            updateCoordsInDOM(cattleName, pos.lat, pos.lng);
+            updateSingleDistanceBubble(cattleName);
+            if (fences.length === 0) return;
+            let inside = false;
+            fences.forEach(fence => {
+                const coords = fence.polygon.getLatLngs()[0].map(p => [p.lat, p.lng]);
+                if (isPointInPolygon([pos.lat, pos.lng], coords)) inside = true;
+            });
+            const wasInside = cattleStatus[cattleName];
+            if (inside && !wasInside) {
+                cattleStatus[cattleName] = true;
+                updateAlertStateInDOM(cattleName, false);
+            } else if (!inside && wasInside) {
+                cattleStatus[cattleName] = false;
+                updateAlertStateInDOM(cattleName, true);
+                updateInfo(`🚨 ${cattleName} saiu da cerca!`, 'danger');
+            }
+            updateSoundState();
+        }
+
+        function onCattleDragEnd(e, cattleName) {
+            updateSingleDistanceBubble(cattleName);
+            updateCattleList();
+            updateSoundState();
+        }
+
+        function toggleCoords(name) {
+            cattleCoordsVisible[name] = !cattleCoordsVisible[name];
+            const el = document.getElementById(`coords-icon-${name}`);
+            if (el) el.classList.toggle('visible', cattleCoordsVisible[name]);
+            updateInfo(`📍 GPS de ${name} ${cattleCoordsVisible[name] ? 'ATIVADO' : 'OCULTO'}`, 'success');
+        }
+
+        function isPointInPolygon(point, polygon) {
+            const x = point[0], y = point[1];
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i][0], yi = polygon[i][1];
+                const xj = polygon[j][0], yj = polygon[j][1];
+                const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        async function searchCity() {
+            const cityName = document.getElementById('cityInput').value;
+            if (!cityName.trim()) { alert('Digite uma cidade.'); return; }
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}&limit=1`);
+                const data = await response.json();
+                if (data.length > 0) {
+                    map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 13);
+                    updateInfo(`✅ Encontrada: ${data[0].display_name.split(',')[0]}`, 'success');
+                } else alert('Cidade não encontrada.');
+            } catch (error) { alert('Erro ao buscar cidade.'); }
+        }
+
+        function updateToolbarStatus(message) {
+            document.getElementById('toolbarStatus').textContent = message;
+        }
+
+        function updateInfo(message, type = '') {
+            const info = document.getElementById('info');
+            info.innerHTML = message;
+            info.className = 'info';
+            if (type) info.classList.add(type);
+        }
+
+        // ===== MENU DE CONTEXTO =====
+        function openContextMenu(name, leafletEvent) {
+            contextMenuCattleName = name;
+            const menu = document.getElementById('contextMenu');
+            const ev = leafletEvent.originalEvent || leafletEvent;
+            let x = ev.clientX || 100, y = ev.clientY || 100;
+            const menuWidth = 240, menuHeight = 320;
+            if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 10;
+            if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 10;
+            if (x < 10) x = 10; if (y < 10) y = 10;
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            document.getElementById('ctxName').textContent = name;
+
+            const alarmOn = cattleAlarmEnabled[name] !== false;
+            const toggleItem = document.getElementById('ctxToggleAlarm');
+            const iconEl = document.getElementById('ctxAlarmIcon');
+            const labelEl = document.getElementById('ctxAlarmLabel');
+            if (alarmOn) {
+                toggleItem.classList.add('toggle-on'); toggleItem.classList.remove('toggle-off');
+                iconEl.textContent = '🔕'; labelEl.textContent = 'Desativar Alarme';
+            } else {
+                toggleItem.classList.add('toggle-off'); toggleItem.classList.remove('toggle-on');
+                iconEl.textContent = '🔔'; labelEl.textContent = 'Ativar Alarme';
+            }
+            document.getElementById('ctxCoordsLabel').textContent = cattleCoordsVisible[name] ? 'Ocultar GPS' : 'Mostrar GPS';
+            menu.classList.add('visible');
+        }
+
+        function closeContextMenu() {
+            document.getElementById('contextMenu').classList.remove('visible');
+            contextMenuCattleName = null;
+        }
+
+        function ctxToggleAlarm() {
+            if (!contextMenuCattleName) return;
+            const name = contextMenuCattleName; closeContextMenu();
+            toggleAlarmForCattle(name);
+        }
+        function ctxToggleCoords() {
+            if (!contextMenuCattleName) return;
+            const name = contextMenuCattleName; closeContextMenu();
+            toggleCoords(name);
+        }
+        function ctxCenter() {
+            if (!contextMenuCattleName) return;
+            const name = contextMenuCattleName; closeContextMenu();
+            const marker = cattleMarkers[name];
+            if (marker) map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15));
+        }
+        function ctxReactivateAll() { closeContextMenu(); reactivateAllAlarms(); }
+        function ctxRemove() {
+            if (!contextMenuCattleName) return;
+            const name = contextMenuCattleName; closeContextMenu();
+            removeCattle(name);
+        }
+
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('contextMenu');
+            if (menu && menu.classList.contains('visible') && !menu.contains(e.target)) closeContextMenu();
+        });
+
+        document.addEventListener('contextmenu', function(e) {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') e.preventDefault();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeContextMenu();
+                if (isAddingCattle) cancelCattleMode();
+                if (isDrawingMode) cancelFence();
+                closeGpsModal();
+            }
+        });
+
+        document.getElementById('cityInput').addEventListener('keypress', e => {
+            if (e.key === 'Enter') searchCity();
+        });
+
+        document.addEventListener('click', function initOnce() {
+            initAudio();
+            document.removeEventListener('click', initOnce);
+        }, { once: true });
+
+        // ============================================
+        // WEBSOCKET - SINCRONIZAÇÃO PC ↔ CELULAR
+        // ============================================
+        function initGpsSocket() {
+            if (gpsSocket && gpsSocket.readyState === WebSocket.OPEN) return;
+
+            try {
+                console.log('🔌 Conectando ao WebSocket:', GPS_WS_URL);
+                gpsSocket = new WebSocket(GPS_WS_URL);
+
+                gpsSocket.onopen = function() {
+                    console.log('✅ WebSocket conectado!');
+                    gpsSocketConnected = true;
+                    updateToolbarStatus('📡 WebSocket conectado via Tailscale');
+                    const statusBox = document.getElementById('toolbarStatus');
+                    statusBox.classList.add('ws-connected');
+                    statusBox.classList.remove('ws-error');
+
+                    if (gpsSocketReconnectTimer) {
+                        clearTimeout(gpsSocketReconnectTimer);
+                        gpsSocketReconnectTimer = null;
+                    }
+
+                    gpsSocket.send(JSON.stringify({ type: 'get_all' }));
+                };
+
+                gpsSocket.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        if (data.type === 'snapshot') {
+                            if (data.cattle) {
+                                Object.keys(data.cattle).forEach(name => {
+                                    const c = data.cattle[name];
+                                    updateGpsCattle(c.lat, c.lng, c.accuracy, c.name || name);
+                                });
+                            }
+                        } else if (data.type === 'position') {
+                            updateGpsCattle(data.lat, data.lng, data.accuracy, data.name);
+                        }
+                    } catch (err) {
+                        console.error('Erro ao processar mensagem WebSocket:', err);
+                    }
+                };
+
+                gpsSocket.onclose = function() {
+                    console.log('❌ WebSocket desconectado. Reconectando em 3s...');
+                    gpsSocketConnected = false;
+                    gpsSocket = null;
+
+                    const statusBox = document.getElementById('toolbarStatus');
+                    statusBox.classList.remove('ws-connected');
+                    statusBox.classList.add('ws-error');
+                    updateToolbarStatus('❌ WebSocket desconectado — reconectando...');
+
+                    if (!gpsSocketReconnectTimer) {
+                        gpsSocketReconnectTimer = setTimeout(() => {
+                            gpsSocketReconnectTimer = null;
+                            initGpsSocket();
+                        }, 3000);
+                    }
+                };
+
+                gpsSocket.onerror = function(err) {
+                    console.error('⚠️ Erro no WebSocket:', err);
+                };
+
+            } catch (err) {
+                console.error('Erro ao criar WebSocket:', err);
+            }
+        }
+
+        function sendGpsToSocket(name, lat, lng, accuracy) {
+            if (!gpsSocket || gpsSocket.readyState !== WebSocket.OPEN) {
+                console.warn('⚠️ WebSocket não conectado.');
+                initGpsSocket();
+                return false;
+            }
+
+            try {
+                gpsSocket.send(JSON.stringify({
+                    type: 'position',
+                    name: name,
+                    lat: lat,
+                    lng: lng,
+                    accuracy: accuracy,
+                    timestamp: Date.now()
+                }));
+                return true;
+            } catch (err) {
+                console.error('Erro ao enviar posição:', err);
+                return false;
+            }
+        }
+
+        // ============================================
+        // GPS REAL - SISTEMA DE PAREAMENTO
+        // ============================================
+
+        function generatePairingCode() {
+            let code = '';
+            for (let i = 0; i < 6; i++) code += Math.floor(Math.random() * 10);
+            return code;
+        }
+
+        function openGpsModal() {
+            const modal = document.getElementById('gpsModal');
+            modal.classList.add('visible');
+
+            if (!gpsPairingCode) gpsPairingCode = generatePairingCode();
+
+            const codeContainer = document.getElementById('pairingCode');
+            codeContainer.innerHTML = '';
+            gpsPairingCode.split('').forEach((digit, i) => {
+                const el = document.createElement('div');
+                el.className = 'digit';
+                el.textContent = digit;
+                codeContainer.appendChild(el);
+            });
+
+            const mobileUrl = buildMobileUrl();
+            document.getElementById('mobileLinkInput').value = mobileUrl;
+
+            generateQRCode(mobileUrl);
+            initGpsChannel();
+            updatePairingStatus(gpsConnected || gpsSocketConnected);
+        }
+
+        function closeGpsModal() {
+            document.getElementById('gpsModal').classList.remove('visible');
+        }
+
+        function buildMobileUrl() {
+            const baseUrl = window.location.origin + window.location.pathname;
+            return `${baseUrl}?mode=mobile&code=${gpsPairingCode}`;
+        }
+
+        function generateQRCode(url) {
+            const wrapper = document.getElementById('qrContainer');
+            if (!wrapper) return;
+            wrapper.innerHTML = '';
+
+            if (typeof QRCode === 'undefined') {
+                wrapper.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #666; font-size: 12px;">
+                        <div style="font-size: 40px; margin-bottom: 10px;">📱</div>
+                        <div style="font-weight: 700; color: #1a1a2e; margin-bottom: 8px;">QR Code indisponível</div>
+                        <div style="font-size: 11px;">Use o link abaixo 👇</div>
+                    </div>
+                `;
+                return;
+            }
+
+            const qrDiv = document.createElement('div');
+            qrDiv.id = 'qrRender_' + Date.now();
+            qrDiv.style.display = 'block';
+            qrDiv.style.lineHeight = '0';
+            qrDiv.style.padding = '0';
+            qrDiv.style.margin = '0';
+            wrapper.appendChild(qrDiv);
+
+            try {
+                new QRCode(qrDiv, {
+                    text: url,
+                    width: 220,
+                    height: 220,
+                    colorDark: '#1a1a2e',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+                console.log('✅ QR Code gerado:', url);
+            } catch (error) {
+                console.error('❌ Erro ao gerar QR:', error);
+                wrapper.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #666; font-size: 12px;">
+                        <div style="font-size: 40px; margin-bottom: 10px;">⚠️</div>
+                        <div style="font-weight: 700; color: #1a1a2e;">Erro ao gerar QR</div>
+                        <div style="margin-top: 8px; font-size: 11px;">Use o link abaixo 👇</div>
+                    </div>
+                `;
+            }
+        }
+
+        function initGpsChannel() {
+            if (gpsChannel) return;
+            try {
+                gpsChannel = new BroadcastChannel('gado_gps_channel');
+                gpsChannel.onmessage = function(event) {
+                    handleGpsMessage(event.data);
+                };
+                console.log('📡 Canal GPS (BroadcastChannel) inicializado');
+            } catch (e) {
+                console.error('BroadcastChannel não suportado:', e);
+            }
+
+            window.addEventListener('storage', function(e) {
+                if (e.key === 'gado_gps_message' && e.newValue) {
+                    try { handleGpsMessage(JSON.parse(e.newValue)); } catch (err) {}
+                }
+            });
+        }
+
+        function handleGpsMessage(data) {
+            if (!data || !data.type) return;
+
+            if (data.type === 'hello') {
+                if (data.code === gpsPairingCode) {
+                    gpsConnected = true;
+                    updatePairingStatus(true);
+                    updateInfo('📡 Celular conectado (BroadcastChannel)!', 'success');
+                    sendGpsMessage({ type: 'welcome', code: gpsPairingCode });
+                } else {
+                    sendGpsMessage({ type: 'reject', reason: 'Código inválido' });
+                }
+            } else if (data.type === 'position') {
+                if (data.code === gpsPairingCode) {
+                    updateGpsCattle(data.lat, data.lng, data.accuracy);
+                }
+            } else if (data.type === 'disconnect') {
+                gpsConnected = false;
+                updatePairingStatus(false);
+                updateInfo('📡 Celular desconectado.', 'warning');
+            }
+        }
+
+        function sendGpsMessage(data) {
+            if (gpsChannel) gpsChannel.postMessage(data);
+            try { localStorage.setItem('gado_gps_message', JSON.stringify(data)); } catch (e) {}
+        }
+
+        function updateGpsCattle(lat, lng, accuracy, nameOverride) {
+            gpsLastUpdate = Date.now();
+            const cattleName = nameOverride || gpsCattleName;
+
+            if (!cattleMarkers[cattleName]) {
+                cattleAlarmEnabled[cattleName] = true;
+                cattleAutoMuted[cattleName] = false;
+
+                const marker = L.marker([lat, lng], {
+                    draggable: false,
+                    icon: createCattleIcon(cattleName, false)
+                }).addTo(map);
+
+                marker.on('contextmenu', (ev) => {
+                    L.DomEvent.stopPropagation(ev);
+                    L.DomEvent.preventDefault(ev);
+                    openContextMenu(cattleName, ev);
+                });
+                marker.on('dblclick', (ev) => {
+                    L.DomEvent.stopPropagation(ev);
+                    toggleCoords(cattleName);
+                });
+
+                cattleMarkers[cattleName] = marker;
+                cattleStatus[cattleName] = true;
+                cattleCoordsVisible[cattleName] = true;
+
+                map.setView([lat, lng], 17);
+                updateInfo(`📡 <strong>GPS conectado!</strong> ${cattleName} em ${lat.toFixed(5)}, ${lng.toFixed(5)}`, 'success');
+            } else {
+                cattleMarkers[cattleName].setLatLng([lat, lng]);
+            }
+
+            updateCoordsInDOM(cattleName, lat, lng);
+            updateSingleDistanceBubble(cattleName);
+            updateCattleList();
+            updateSoundState();
+            updateToolbarStatus(`📡 ${cattleName}: ${lat.toFixed(5)}, ${lng.toFixed(5)} (±${(accuracy || 0).toFixed(0)}m)`);
+        }
+
+        function updatePairingStatus(connected) {
+            const status = document.getElementById('pairingStatus');
+            const icon = document.getElementById('pairingStatusIcon');
+            const title = document.getElementById('pairingStatusTitle');
+            const subtitle = document.getElementById('pairingStatusSubtitle');
+
+            if (connected) {
+                status.className = 'pairing-status connected';
+                icon.textContent = '✅';
+                title.textContent = 'Celular conectado!';
+                subtitle.textContent = 'Recebendo dados de GPS em tempo real';
+                document.getElementById('disconnectBtn').style.display = 'block';
+            } else {
+                status.className = 'pairing-status waiting';
+                icon.textContent = '📱';
+                title.textContent = 'Aguardando conexão...';
+                subtitle.textContent = 'Abra o link no celular e digite o código';
+                document.getElementById('disconnectBtn').style.display = 'none';
+            }
+        }
+
+        function copyMobileLink() {
+            const input = document.getElementById('mobileLinkInput');
+            input.select();
+            input.setSelectionRange(0, 99999);
+            try {
+                navigator.clipboard.writeText(input.value);
+                updateInfo('📋 Link copiado!', 'success');
+            } catch (e) {
+                document.execCommand('copy');
+                updateInfo('📋 Link copiado!', 'success');
+            }
+        }
+
+        function disconnectGps() {
+            if (!confirm('Desconectar a coleira GPS?')) return;
+            sendGpsMessage({ type: 'disconnect' });
+            gpsConnected = false;
+            if (cattleMarkers[gpsCattleName]) {
+                map.removeLayer(cattleMarkers[gpsCattleName]);
+                delete cattleMarkers[gpsCattleName];
+                delete cattleStatus[gpsCattleName];
+                delete cattleCoordsVisible[gpsCattleName];
+                delete cattleDistances[gpsCattleName];
+                delete cattleAlarmEnabled[gpsCattleName];
+                delete cattleAutoMuted[gpsCattleName];
+            }
+            updateCattleList();
+            updateAllDistanceBubbles();
+            updatePairingStatus(false);
+            updateInfo('🔌 Coleira GPS desconectada.', 'warning');
+        }
+
+        function checkMobileMode() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('mode') === 'mobile') {
+                const codeFromUrl = params.get('code') || '';
+                renderMobileInterface(codeFromUrl);
+                return true;
+            }
+            return false;
+        }
+
+        function renderMobileInterface(initialCode) {
+            document.body.innerHTML = `
+                <div style="min-height: 100vh; background: radial-gradient(circle at 50% 30%, #1a1a2e, #0f0f1a); padding: 20px; font-family: 'Segoe UI', sans-serif; color: #e0e0e0; display: flex; align-items: center; justify-content: center;">
+                    <div style="max-width: 420px; width: 100%; background: linear-gradient(145deg, #1e1e2e, #16161f); border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.8); border: 2px solid rgba(79, 195, 247, 0.3);">
+                        <div style="text-align: center; margin-bottom: 24px;">
+                            <div style="font-size: 48px; margin-bottom: 8px;">📡</div>
+                            <h1 style="font-size: 22px; background: linear-gradient(135deg, #4fc3f7, #7c4dff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 6px;">Coleira GPS Real</h1>
+                            <p style="font-size: 13px; color: #90a4ae;">Este celular será rastreado como uma coleira</p>
+                        </div>
+
+                        <div style="background: rgba(0,0,0,0.3); border-radius: 14px; padding: 20px; margin-bottom: 20px;">
+                            <label style="font-size: 12px; color: #4fc3f7; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 10px;">🔢 Digite o código de 6 dígitos</label>
+                            <input type="text" id="mobileCodeInput" maxlength="6" inputmode="numeric" pattern="[0-9]*"
+                                value="${initialCode}"
+                                placeholder="000000"
+                                style="width: 100%; padding: 16px; font-size: 32px; text-align: center; font-family: 'Courier New', monospace; font-weight: 900; letter-spacing: 12px; background: #1a1a28; color: #4fc3f7; border: 2px solid rgba(79, 195, 247, 0.3); border-radius: 12px; outline: none; text-shadow: 0 0 15px rgba(79, 195, 247, 0.6);">
+                        </div>
+
+                        <button id="mobileConnectBtn" style="width: 100%; padding: 18px; font-size: 16px; font-weight: 700; background: linear-gradient(145deg, #0288d1, #01579b); color: #fff; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 6px 20px rgba(2, 136, 209, 0.4); margin-bottom: 16px;">
+                            📡 Conectar e Enviar GPS
+                        </button>
+
+                        <div id="mobileStatus" style="padding: 16px; border-radius: 12px; background: rgba(79, 195, 247, 0.1); border: 1px solid rgba(79, 195, 247, 0.2); font-size: 13px; color: #b0bec5; text-align: center;">
+                            💡 Aguardando conexão...
+                        </div>
+
+                        <div id="mobileCoords" style="display: none; margin-top: 16px; padding: 14px; background: rgba(0,0,0,0.4); border-radius: 10px; font-family: 'Courier New', monospace; font-size: 12px; color: #00ff88; line-height: 1.6;">
+                            <div>📡 <strong>Enviando dados:</strong></div>
+                            <div id="mobileLat">Lat: --</div>
+                            <div id="mobileLng">Lng: --</div>
+                            <div id="mobileAcc">Precisão: --</div>
+                            <div id="mobileCount" style="margin-top: 8px; color: #78909c; font-size: 11px;">Pacotes enviados: 0</div>
+                        </div>
+
+                        <div style="margin-top: 20px; padding: 14px; background: rgba(251, 192, 45, 0.1); border: 1px solid rgba(251, 192, 45, 0.3); border-radius: 10px; font-size: 12px; color: #ffcc80; line-height: 1.5;">
+                            ⚠️ <strong>Importante:</strong> Mantenha esta página aberta e o celular com o GPS ativado.
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const input = document.getElementById('mobileCodeInput');
+            const btn = document.getElementById('mobileConnectBtn');
+
+            input.addEventListener('input', function() {
+                this.value = this.value.replace(/\D/g, '');
+            });
+
+            btn.addEventListener('click', startMobileTracking);
+
+            if (initialCode && initialCode.length === 6) {
+                setTimeout(startMobileTracking, 500);
+            }
+        }
+
+        function startMobileTracking() {
+            const input = document.getElementById('mobileCodeInput');
+            const code = input.value.trim();
+            const status = document.getElementById('mobileStatus');
+
+            if (code.length !== 6) {
+                status.innerHTML = '⚠️ Digite os 6 dígitos do código';
+                status.style.background = 'rgba(239, 83, 80, 0.15)';
+                status.style.borderColor = 'rgba(239, 83, 80, 0.4)';
+                return;
+            }
+
+            if (!navigator.geolocation) {
+                status.innerHTML = '❌ Seu navegador não suporta GPS';
+                return;
+            }
+
+            initGpsSocket();
+
+            let channel;
+            try {
+                channel = new BroadcastChannel('gado_gps_channel');
+            } catch (e) {
+                console.error('BroadcastChannel não disponível');
+            }
+
+            if (channel) {
+                channel.postMessage({ type: 'hello', code: code });
+                try { localStorage.setItem('gado_gps_message', JSON.stringify({ type: 'hello', code: code })); } catch (e) {}
+            }
+
+            let packetCount = 0;
+            let accepted = false;
+
+            if (channel) {
+                channel.onmessage = function(event) {
+                    const data = event.data;
+                    if (!data || !data.type) return;
+                    if (data.type === 'welcome') {
+                        accepted = true;
+                    }
+                };
+            }
+
+            setTimeout(() => {
+                accepted = true;
+                status.innerHTML = '✅ Conectado! Enviando GPS...';
+                status.style.background = 'rgba(67, 160, 71, 0.15)';
+                status.style.borderColor = 'rgba(67, 160, 71, 0.4)';
+                document.getElementById('mobileCoords').style.display = 'block';
+            }, 1500);
+
+            document.getElementById('mobileCoords').style.display = 'block';
+            status.innerHTML = '✅ Enviando GPS...';
+            status.style.background = 'rgba(67, 160, 71, 0.15)';
+            status.style.borderColor = 'rgba(67, 160, 71, 0.4)';
+
+            startGpsWatch(channel, code, () => {
+                packetCount++;
+                const countEl = document.getElementById('mobileCount');
+                if (countEl) countEl.textContent = `Pacotes enviados: ${packetCount}`;
+            });
+        }
+
+        function startGpsWatch(channel, code, onPacket) {
+            navigator.geolocation.watchPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+
+                    sendGpsToSocket('GPS-CELULAR', lat, lng, accuracy);
+
+                    if (channel) {
+                        const msg = { type: 'position', code: code, lat, lng, accuracy, timestamp: Date.now() };
+                        channel.postMessage(msg);
+                        try { localStorage.setItem('gado_gps_message', JSON.stringify(msg)); } catch (e) {}
+                    }
+
+                    document.getElementById('mobileLat').textContent = `Lat: ${lat.toFixed(6)}`;
+                    document.getElementById('mobileLng').textContent = `Lng: ${lng.toFixed(6)}`;
+                    document.getElementById('mobileAcc').textContent = `Precisão: ±${accuracy.toFixed(0)}m`;
+
+                    if (onPacket) onPacket();
+                },
+                function(error) {
+                    console.error('Erro GPS:', error);
+                    let msg = '❌ Erro ao acessar GPS';
+                    if (error.code === 1) msg = '❌ Permissão de GPS negada. Autorize nas configurações.';
+                    else if (error.code === 2) msg = '❌ Sinal de GPS indisponível';
+                    else if (error.code === 3) msg = '⏱️ Tempo esgotado ao buscar GPS';
+                    document.getElementById('mobileStatus').innerHTML = msg;
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 0
+                }
+            );
+        }
+
+        // ===== INICIALIZAÇÃO =====
+        if (checkMobileMode()) {
+            console.log('📱 Modo celular ativo');
+            initGpsSocket();
+        } else {
+            console.log('🗺️ Modo mapa ativo');
+            initGpsChannel();
+            initGpsSocket();
+            updateSaveMapButton();
+            setTimeout(() => { map.invalidateSize(); }, 100);
         }
     </script>
+
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-header">
+            <span>🐂 Boi</span>
+            <span class="cattle-name-badge" id="ctxName">B1</span>
+        </div>
+        <div class="context-menu-item" id="ctxToggleAlarm" onclick="ctxToggleAlarm()">
+            <span class="icon" id="ctxAlarmIcon">🔔</span>
+            <span id="ctxAlarmLabel">Desativar Alarme</span>
+        </div>
+        <div class="context-menu-item" onclick="ctxToggleCoords()">
+            <span class="icon">📍</span>
+            <span id="ctxCoordsLabel">Mostrar GPS</span>
+        </div>
+        <div class="context-menu-item" onclick="ctxCenter()">
+            <span class="icon">🎯</span>
+            <span>Centralizar no Mapa</span>
+        </div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" onclick="ctxReactivateAll()">
+            <span class="icon">🔄</span>
+            <span>Ativar Todos os Alarmes</span>
+        </div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item danger-item" onclick="ctxRemove()">
+            <span class="icon">🗑️</span>
+            <span>Remover Boi</span>
+        </div>
+        <div class="context-menu-hint">💡 Clique direito em qualquer boi</div>
+    </div>
 </body>
 </html>
